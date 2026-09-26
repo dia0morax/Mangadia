@@ -1098,31 +1098,33 @@
         if (!errorLogs.length) return alert("لا توجد أخطاء لنسخها.");
         const text = errorLogs.map(e => `[${e.time}] ${e.title}\n${e.details}`).join("\n\n---\n\n");
         navigator.clipboard.writeText(text).then(() => alert("تم نسخ السجل بالكامل!")).catch(() => alert("فشل النسخ"));
-    window.addEventListener('error', e => logError(`JS Error: ${e.message}`, `${e.filename}:${e.lineno}`));
-    window.addEventListener('unhandledrejection', e => logError("Promise Error", e.reason));
-
-    // اعتراض إغلاق الصفحة أو الخروج من المتصفح بالخطأ
-    window.addEventListener('beforeunload', (e) => {
-      if (readerView && readerView.style.display === 'block') {
-        e.preventDefault();
-        e.returnValue = '';
       }
-    });
 
-    // اعتراض زر الرجوع في شريط الهاتف لمنع الخروج المفاجئ أثناء القراءة
-    window.addEventListener('popstate', (e) => {
-      if (readerView && readerView.style.display === 'block') {
-        if (!confirm("هل ترغب بالفعل في مغادرة القارئ والرجوع؟")) {
-          history.pushState(null, '', window.location.href);
-        } else {
-          showLibraryView();
+      window.addEventListener('error', e => logError(`JS Error: ${e.message}`, `${e.filename}:${e.lineno}`));
+      window.addEventListener('unhandledrejection', e => logError("Promise Error", e.reason));
+
+      // اعتراض إغلاق الصفحة أو الخروج من المتصفح بالخطأ
+      window.addEventListener('beforeunload', (e) => {
+        if (typeof readerView !== 'undefined' && readerView && readerView.style.display === 'block') {
+          e.preventDefault();
+          e.returnValue = '';
         }
-      }
-    });
-    history.pushState(null, '', window.location.href);
+      });
 
+      // اعتراض زر الرجوع في شريط الهاتف لمنع الخروج المفاجئ أثناء القراءة
+      window.addEventListener('popstate', (e) => {
+        if (typeof readerView !== 'undefined' && readerView && readerView.style.display === 'block') {
+          if (!confirm("هل ترغب بالفعل في مغادرة القارئ والرجوع؟")) {
+            history.pushState(null, '', window.location.href);
+          } else {
+            showLibraryView();
+          }
+        }
+      });
+      history.pushState(null, '', window.location.href);
 
       // ----------------- قاعدة البيانات المحلية والمزامنة السحابية المباشرة -----------------
+
       let db;
 
       const request = indexedDB.open("MangaSuperDB", 2);
