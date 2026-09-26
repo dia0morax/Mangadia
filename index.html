@@ -2,7 +2,8 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=4.0, user-scalable=yes">
+
 
   <title>dodde manga</title>
 
@@ -317,12 +318,12 @@
       z-index: 5;
     }
 
-    /* ================= إطار المانجا المعزول للزووم ================= */
+    /* ================= إطار المانجا الحر للسلاسة والتمرير ================= */
     #readerView {
-      overflow: hidden;
-      touch-action: none; /* يتم التحكم بالزووم والتحريك برمجياً بنعومة تامة */
       position: relative;
       width: 100%;
+      overflow-x: visible;
+      overflow-y: visible;
     }
     #reader {
       width: 100%;
@@ -332,9 +333,8 @@
       flex-direction: column;
       align-items: center;
       min-height: 80vh;
-      transform-origin: 0 0;
-      will-change: transform;
     }
+
 
     .page-wrapper {
       width: 100%;
@@ -584,26 +584,28 @@
       bottom: -100%;
       left: 0;
       right: 0;
-      width: 100%;
-      max-width: 900px;
+      width: 100vw !important;
+      max-width: 100vw !important;
       margin: 0 auto;
-      max-height: 75vh;
+      max-height: 70vh;
       box-sizing: border-box;
-      background: rgba(15, 23, 42, 0.96);
+      background: rgba(15, 23, 42, 0.97);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border-top: 2px solid #38bdf8;
       border-radius: 24px 24px 0 0;
-      z-index: 9999; /* طبقة علوية مطلقة لا تتأثر بالصفحة */
+      z-index: 99999;
       padding: 18px;
-      box-shadow: 0 -12px 36px rgba(0,0,0,0.8);
+      box-shadow: 0 -12px 36px rgba(0,0,0,0.85);
       overflow-y: auto;
       transition: bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transform-origin: center bottom;
     }
 
     #bottomSheet.open {
       bottom: 0;
     }
+
 
 
     .sheet-header {
@@ -1772,132 +1774,78 @@
       }
     });
 
-    // ================= محرك الزووم والتحريك المعزول لصفحات المانجا فقط =================
-    let mangaScale = 1;
-    let mangaPanX = 0;
-    let mangaPanY = 0;
-    let startPinchDist = 0;
-    let startScale = 1;
-    let pinchCenter = { x: 0, y: 0 };
-    let lastPanPos = { x: 0, y: 0 };
-    let isPinching = false;
-    let isPanning = false;
-
-    function updateMangaTransform() {
-      if (!reader) return;
-      // منع الخروج عن حدود الإطار عند التصغير
-      if (mangaScale <= 1) {
-        mangaScale = 1;
-        mangaPanX = 0;
-      }
-      reader.style.transform = `translate(${mangaPanX}px, ${mangaPanY}px) scale(${mangaScale})`;
+    // ================= معالجة اللمس النظيفة: تمرير حر وزووم ثابت واكتشاف ذكي للفقاعات =================
+    // دالة ضمان بقاء نافذة الترجمة بالحجم وموضع الشاشة الطبيعي تماماً مهما كبّرت المانجا
+    function fixSheetScaleToScreen() {
+      if (!window.visualViewport) return;
+      const vv = window.visualViewport;
+      const zoomFactor = vv.scale || 1;
+      
+      // معادلة نسبة الزووم المعكوسة لتبقى أبعاد وخطوط النافذة مطابقة للشاشة تماماً
+      bottomSheet.style.transform = `scale(${1 / zoomFactor})`;
+      bottomSheet.style.width = `${vv.width * zoomFactor}px`;
+      bottomSheet.style.left = `${vv.offsetLeft}px`;
+      bottomSheet.style.bottom = `${-vv.offsetTop}px`;
     }
 
-    const readerViewEl = document.getElementById('readerView');
-
-    readerViewEl.addEventListener('touchstart', (e) => {
-      if (isCropMode) return;
-
-      // عند لمس إصبعين: بدء الزوم على موضع الأصابع
-      if (e.touches.length === 2) {
+    document.addEventListener('touchstart', (e) => {
+      // إذا كان اللمس بإصبعين للزووم نترك التكبير الطبيعي السلس للمتصفح دون أي قيد
+      if (e.touches.length > 1) {
         cancelLongPress();
-        isPinching = true;
-        isPanning = false;
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        startPinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-        startScale = mangaScale;
-        pinchCenter = {
-          x: (t1.clientX + t2.clientX) / 2,
-          y: (t1.clientY + t2.clientY) / 2
-        };
         return;
       }
 
-      // عند لمس إصبع واحد
-      if (e.touches.length === 1) {
-        const touch = e.touches[0];
-        touchStartPos = { x: touch.clientX, y: touch.clientY };
-        lastPanPos = { x: touch.clientX, y: touch.clientY };
-        hasMoved = false;
-
-        // إذا كانت المانجا مكبرة، يصبح الإصبع للتحريك الأفقي
-        if (mangaScale > 1) {
-          isPanning = true;
-        }
-
-        const targetImg = getMangaImageAtPoint(touch.clientX, touch.clientY);
-        if (!targetImg) return;
-
-        const calcBox = calculateBubbleBox(touch.clientX, touch.clientY, targetImg);
-        const wrapper = targetImg.closest('.page-wrapper');
-
-        previewDelayTimer = setTimeout(() => {
-          if (!hasMoved && !isCropMode && !isPinching) {
-            showTargetPreview(wrapper, calcBox);
-          }
-        }, 160);
-
-        longPressTimer = setTimeout(() => {
-          if (!hasMoved && !isCropMode && !isPinching) {
-            if (navigator.vibrate) navigator.vibrate(50);
-            removeTargetPreview();
-            triggerSmartBubbleDetection(touch.clientX, touch.clientY, targetImg, calcBox);
-          }
-        }, 480);
-      }
-    }, { passive: false });
-
-    readerViewEl.addEventListener('touchmove', (e) => {
-      // إدارة الزووم اللمسي بإصبعين
-      if (isPinching && e.touches.length === 2) {
-        e.preventDefault();
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-        const factor = currentDist / startPinchDist;
-        mangaScale = Math.min(Math.max(1, startScale * factor), 4.0); // تكبير حر وسلس حتى 4x
-        updateMangaTransform();
+      if (isCropMode) {
+        cancelLongPress();
         return;
       }
 
-      // تحريك المانجا أفقياً عند التكبير بإصبع واحد
-      if (isPanning && e.touches.length === 1 && mangaScale > 1) {
-        const touch = e.touches[0];
-        const dx = touch.clientX - lastPanPos.x;
-        mangaPanX += dx;
-        lastPanPos = { x: touch.clientX, y: touch.clientY };
-        updateMangaTransform();
-      }
+      const touch = e.touches[0];
+      touchStartPos = { x: touch.clientX, y: touch.clientY };
+      hasMoved = false;
 
-      // إلغاء الضغط المطول عند التمرير
-      if (e.touches.length === 1) {
-        const touch = e.touches[0];
-        if (Math.abs(touch.clientX - touchStartPos.x) > 10 || Math.abs(touch.clientY - touchStartPos.y) > 10) {
-          hasMoved = true;
-          cancelLongPress();
+      const targetImg = getMangaImageAtPoint(touch.clientX, touch.clientY);
+      if (!targetImg) return;
+
+      const calcBox = calculateBubbleBox(touch.clientX, touch.clientY, targetImg);
+      const wrapper = targetImg.closest('.page-wrapper');
+
+      // إظهار المربع التوضيحي فقط عند الثبات وليس أثناء التمرير العادي
+      previewDelayTimer = setTimeout(() => {
+        if (!hasMoved && !isCropMode) {
+          showTargetPreview(wrapper, calcBox);
         }
-      }
-    }, { passive: false });
+      }, 160);
 
-    readerViewEl.addEventListener('touchend', (e) => {
-      if (e.touches.length < 2) isPinching = false;
-      if (e.touches.length === 0) isPanning = false;
-      cancelLongPress();
+      longPressTimer = setTimeout(() => {
+        if (!hasMoved && !isCropMode) {
+          if (navigator.vibrate) navigator.vibrate(50);
+          removeTargetPreview();
+          triggerSmartBubbleDetection(touch.clientX, touch.clientY, targetImg, calcBox);
+        }
+      }, 480);
     }, { passive: true });
 
-    // نقر مزدوج لإعادة ضبط زووم المانجا للحجم الطبيعي
-    let lastMangaTap = 0;
-    readerViewEl.addEventListener('touchend', (e) => {
-      const now = Date.now();
-      if (now - lastMangaTap < 280 && e.touches.length === 0) {
-        mangaScale = 1;
-        mangaPanX = 0;
-        mangaPanY = 0;
-        updateMangaTransform();
+    document.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 1) {
+        cancelLongPress();
+        return;
       }
-      lastMangaTap = now;
+
+      const touch = e.touches[0];
+      const diffX = Math.abs(touch.clientX - touchStartPos.x);
+      const diffY = Math.abs(touch.clientY - touchStartPos.y);
+
+      // إذا تحرك الإصبع للتمرير يلغى مؤقت الضغط المطول فوراً ويبقى التمرير سلساً
+      if (diffX > 10 || diffY > 10) {
+        hasMoved = true;
+        cancelLongPress();
+      }
     }, { passive: true });
+
+    document.addEventListener('touchend', cancelLongPress, { passive: true });
+    document.addEventListener('touchcancel', cancelLongPress, { passive: true });
+
 
 
 
@@ -2121,9 +2069,11 @@
 
     // ----------------- الترجمة والـ OCR مع التمييز الأحمر للكلمات المحفوظة -----------------
     async function sendToTranslate(base64Image) {
+      fixSheetScaleToScreen();
       bottomSheet.classList.add('open');
       sheetContent.style.display = 'none';
       loader.style.display = 'block';
+
 
 
 
@@ -2397,7 +2347,23 @@
 
     function closeSheet() {
       bottomSheet.classList.remove('open');
+      setTimeout(() => {
+        bottomSheet.style.transform = 'none';
+        bottomSheet.style.width = '100vw';
+        bottomSheet.style.left = '0';
+        bottomSheet.style.bottom = '-100%';
+      }, 320);
     }
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        if (bottomSheet.classList.contains('open')) fixSheetScaleToScreen();
+      });
+      window.visualViewport.addEventListener('scroll', () => {
+        if (bottomSheet.classList.contains('open')) fixSheetScaleToScreen();
+      });
+    }
+
 
 
 
