@@ -1143,14 +1143,11 @@
         db = e.target.result;
         renderLibrary();
         checkLastRead();
-        const savedUser = localStorage.getItem("DODDE_GOOGLE_USER");
-        if (savedUser) updateUserUI(JSON.parse(savedUser));
       };
-
 
       request.onerror = (e) => logError("IndexedDB Init Error", e.target.error);
 
-      // تهيئة مشروع Firebase الرسمي الخاص بموقعك
+      // تهيئة مشروع Firebase الرسمي الخاص بموقعك مع تثبيت الجلسة محلياً
       const firebaseConfig = {
         apiKey: "AIzaSyAthpdOqLBiTkls44oZHrKFK0Dp2aQQSBc",
         authDomain: "dodde-manga.firebaseapp.com",
@@ -1164,6 +1161,10 @@
       if (!firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
       }
+      
+      // ضمان بقاء تسجيل الدخول محفوظاً دائماً في المتصفح
+      firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+
       const firestoreDB = firebase.firestore();
       let currentAuthUser = null;
 
@@ -1179,14 +1180,15 @@
         cloudUnsubscribers = [];
 
         if (user) {
-          if (lockScreen) lockScreen.style.display = 'none';
+          if (lockScreen) lockScreen.style.setProperty('display', 'none', 'important');
           bindRealtimeCloudSync(user.uid);
         } else {
-          if (lockScreen) lockScreen.style.display = 'flex';
+          if (lockScreen) lockScreen.style.setProperty('display', 'flex', 'important');
           if (mangaGrid) mangaGrid.innerHTML = "";
           if (continueCard) continueCard.style.display = 'none';
         }
       });
+
 
       function handleGoogleSignIn() {
         if (currentAuthUser) {
