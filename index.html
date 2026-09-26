@@ -2,8 +2,9 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=4.0, user-scalable=yes">
   <title>dodde manga</title>
+
   
   <!-- Font Awesome 6 Icons & Google Cairo Font -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
@@ -337,7 +338,7 @@
       background: #111827;
       min-height: 250px;
     }
-    /* طبقة الهايلايت للكلمات المحفوظة داخل صفحة المانجا نفسها */
+    /* طبقة الهايلايت للكلمات المحفوظة */
     .manga-highlight-layer {
       position: absolute;
       top: 0;
@@ -347,15 +348,77 @@
       pointer-events: none;
       z-index: 10;
     }
+    /* هايلايت ماركر شفاف ومقفل الارتفاع لسطر واحد بدون أي خطوط مصمتة */
     .manga-word-highlight {
-      position: absolute;
-      background: rgba(239, 68, 68, 0.32);
-      border: 1.5px solid #ef4444;
-      border-radius: 4px;
-      box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
-      animation: highlightFade 0.3s ease-in;
+      position: absolute !important;
+      background: rgba(239, 68, 68, 0.25) !important;
+      border: none !important;
+      border-radius: 4px !important;
+      box-shadow: none !important;
+      animation: highlightFade 0.25s ease-out;
+      pointer-events: auto;
+      cursor: pointer;
+      mix-blend-mode: multiply;
+      height: 14px !important;
+      max-height: 16px !important;
+      transition: background 0.2s;
     }
+    .manga-word-highlight:active {
+      background: rgba(239, 68, 68, 0.42) !important;
+    }
+
+
     @keyframes highlightFade { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+    /* وضع ملء الشاشة الكامل مع دعم التكبير والتحريك الحر بإصبعين */
+    body.is-fullscreen header,
+    body.is-fullscreen .fab-group,
+    body.is-fullscreen #errorBadge {
+      display: none !important;
+    }
+    body.is-fullscreen {
+      touch-action: pan-x pan-y pinch-zoom !important;
+    }
+    body.is-fullscreen #readerView {
+      padding: 0 !important;
+      margin: 0 !important;
+      max-width: 100% !important;
+      touch-action: pan-x pan-y pinch-zoom !important;
+    }
+    body.is-fullscreen #reader {
+      max-width: 100% !important;
+      touch-action: pan-x pan-y pinch-zoom !important;
+    }
+
+
+    /* زر الخروج الزجاجي الصغير بالزاوية أثناء ملء الشاشة */
+    #exitFullscreenBtn {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 9999;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      color: #94a3b8;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 0.95rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      transition: all 0.2s;
+    }
+    #exitFullscreenBtn:hover { color: #fff; border-color: #ef4444; }
+    #exitFullscreenBtn:active { transform: scale(0.9); }
+    body.is-fullscreen #exitFullscreenBtn { display: flex; }
+
+
+
 
     .page-indicator {
       position: absolute;
@@ -753,7 +816,12 @@
     </div>
   </div>
 
-  <!-- ================= واجهة القارئ ================= -->
+  <!-- زر الخروج المصغر من ملء الشاشة بالزاوية -->
+  <button id="exitFullscreenBtn" onclick="toggleAppFullscreen()" title="الخروج من ملء الشاشة">
+    <i class="fa-solid fa-compress"></i>
+  </button>
+
+  <!-- ================= واجهة القارئ الطبيعية ================= -->
   <div id="readerView" class="view-container" style="padding:0;">
     <div id="reader"></div>
   </div>
@@ -761,9 +829,44 @@
   <!-- مجموعة الأزرار العائمة باليمين -->
   <div class="fab-group">
     <button class="fab fab-home" id="homeFab" onclick="showLibraryView()" style="display:none;" title="العودة للمكتبة"><i class="fa-solid fa-house"></i></button>
+    <button class="fab" id="fullscreenFab" onclick="toggleAppFullscreen()" style="display:none; background: linear-gradient(135deg, #0284c7, #0369a1);" title="ملء الشاشة بالكامل"><i class="fa-solid fa-expand"></i></button>
     <button class="fab fab-vocab" onclick="openVocabModal()" title="حافظة الأيام وأنكي"><i class="fa-solid fa-graduation-cap"></i></button>
     <button class="fab fab-crop" id="cropToggleBtn" onclick="toggleCropMode()" style="display:none;" title="تحديد فقاعة للترجمة"><i class="fa-solid fa-crop-simple"></i></button>
   </div>
+
+  <!-- نافذة عرض تفاصيل المفردة المحفوظة بتصميم الموقع الأنيق -->
+  <div id="wordDetailModal" class="modal-overlay" onclick="closeWordDetailModal(event)">
+    <div class="modal-content" style="max-width: 420px; padding: 20px;">
+      <div class="sheet-header" style="margin-bottom: 14px;">
+        <span class="sheet-title" style="color: #38bdf8;">
+          <i class="fa-solid fa-bookmark" style="color: #ef4444;"></i> المفردة المحفوظة
+        </span>
+        <button class="close-btn" onclick="document.getElementById('wordDetailModal').style.display='none'"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div style="text-align: right;">
+        <div style="background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.25); padding: 12px 14px; border-radius: 12px; margin-bottom: 12px;">
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">الكلمة الأصلية</div>
+          <div id="modalWordTitle" style="font-size: 1.25rem; font-weight: 800; color: #facc15; direction: ltr; text-align: left;"></div>
+        </div>
+        <div style="background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2); padding: 12px 14px; border-radius: 12px; margin-bottom: 12px;">
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">المعنى بالعربية</div>
+          <div id="modalWordMeaning" style="font-size: 1.05rem; font-weight: 700; color: #4ade80;"></div>
+        </div>
+        <div id="modalSentenceBox" style="display:none; background: #0b0f19; border: 1px solid var(--card-border); padding: 10px 12px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; color: #cbd5e1; direction: ltr; text-align: left;"></div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button id="deleteWordFromModalBtn" class="day-btn" style="background: #dc2626; padding: 10px 14px; font-weight: bold;" onclick="handleDeleteWordFromModal()">
+          <i class="fa-solid fa-trash-can"></i> حذف الكلمة
+        </button>
+        <button class="day-btn" style="flex: 1; background: rgba(255,255,255,0.08); padding: 10px; font-weight: bold;" onclick="document.getElementById('wordDetailModal').style.display='none'">
+          إغلاق
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+
 
   <!-- قارئ الأخطاء باليسار -->
   <div id="errorBadge" onclick="openErrorModal()" title="سجل الأخطاء والتشخيص">
@@ -1020,24 +1123,25 @@
       }
     }
 
-    // سحب ومزامنة بيانات المستخدم بالكامل (رفع الكلمات الحالية وتنزيل السحابية وتتبع التقدم)
-    function syncUserDataFromCloud(uid) {
-      if (!firestoreDB) return;
+    // مزامنة شاملة ثنائية الاتجاه مع حساب Google (رفع المحلي وتنزيل السحابي)
+    async function syncUserDataFromCloud(uid) {
+      if (!firestoreDB || !uid) return;
 
-      // 1. رفع أي كلمات مخزنة محلياً في الهاتف إلى سحابة حساب المستخدم فوراً
+      const userDoc = firestoreDB.collection("users").doc(uid);
+
+      // 1. رفع الكلمات المحلية للسحابة وتنزيل ما في السحابة
       if (db) {
         const localTx = db.transaction("words", "readonly");
-        const req = localTx.objectStore("words").getAll();
-        req.onsuccess = () => {
-          const localWords = req.result || [];
-          localWords.forEach(w => {
-            firestoreDB.collection("users").doc(uid).collection("words").doc(w.id).set(w).catch(()=>{});
-          });
+        const wordsReq = localTx.objectStore("words").getAll();
+        wordsReq.onsuccess = async () => {
+          const localWords = wordsReq.result || [];
+          for (const w of localWords) {
+            userDoc.collection("words").doc(w.id).set(w).catch(e => logError("Upload Word Error", e));
+          }
         };
       }
 
-      // 2. تنزيل الكلمات المحفوظة في السحابة وحفظها في قاعدة بيانات الهاتف
-      firestoreDB.collection("users").doc(uid).collection("words").get().then((snap) => {
+      userDoc.collection("words").get().then(snap => {
         if (!snap.empty && db) {
           const tx = db.transaction("words", "readwrite");
           const store = tx.objectStore("words");
@@ -1045,8 +1149,24 @@
         }
       }).catch(err => logError("Sync Words Cloud", err.message));
 
-      // 3. تنزيل فصول المكتبة من السحابة وتحديث واجهة الكتب
-      firestoreDB.collection("users").doc(uid).collection("library").get().then((snap) => {
+      // 2. مزامنة الهايلايتات مع السحابة
+      const localHighlights = JSON.parse(localStorage.getItem("DODDE_HIGHLIGHTS") || "[]");
+      localHighlights.forEach(h => {
+        const hId = `hl_${btoa(unescape(encodeURIComponent(h.chapterUrl))).replace(/\//g,'_')}_p${h.page}_${h.word.toLowerCase()}`;
+        userDoc.collection("highlights").doc(hId).set(h).catch(()=>{});
+      });
+
+      userDoc.collection("highlights").get().then(snap => {
+        if (!snap.empty) {
+          const cloudHl = [];
+          snap.forEach(doc => cloudHl.push(doc.data()));
+          localStorage.setItem("DODDE_HIGHLIGHTS", JSON.stringify(cloudHl));
+          if (currentChapterUrl) applySavedMangaHighlights(currentChapterUrl);
+        }
+      }).catch(err => logError("Sync Highlights Cloud", err.message));
+
+      // 3. مزامنة فصول المكتبة
+      userDoc.collection("library").get().then(snap => {
         if (!snap.empty && db) {
           const tx = db.transaction("library", "readwrite");
           const store = tx.objectStore("library");
@@ -1058,8 +1178,8 @@
         }
       }).catch(err => logError("Sync Library Cloud", err.message));
 
-      // 4. استرجاع آخر موضع قراءة توقفت عنده سحابياً
-      firestoreDB.collection("users").doc(uid).collection("history").doc("lastRead").get().then((doc) => {
+      // 4. استرجاع آخر موضع قراءة
+      userDoc.collection("history").doc("lastRead").get().then(doc => {
         if (doc.exists && db) {
           const histTx = db.transaction("history", "readwrite");
           histTx.objectStore("history").put({ key: "lastRead", data: doc.data() });
@@ -1067,6 +1187,7 @@
         }
       }).catch(()=>{});
     }
+
 
 
 
@@ -1215,12 +1336,19 @@
       };
     }
 
-    // ----------------- التنقل بين الواجهات -----------------
+    // ----------------- التنقل ونظام ملء الشاشة الكامل -----------------
+    const fullscreenFab = document.getElementById('fullscreenFab');
+
     function showLibraryView() {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(()=>{});
+      }
+      document.body.classList.remove('is-fullscreen');
       libraryView.style.display = 'block';
       readerView.style.display = 'none';
       cropBtn.style.display = 'none';
       homeFab.style.display = 'none';
+      if (fullscreenFab) fullscreenFab.style.display = 'none';
       window.scrollTo({ top: 0, behavior: 'smooth' });
       renderLibrary();
       checkLastRead();
@@ -1231,7 +1359,107 @@
       readerView.style.display = 'block';
       cropBtn.style.display = 'flex';
       homeFab.style.display = 'flex';
+      if (fullscreenFab) fullscreenFab.style.display = 'flex';
     }
+
+    // الدخول والخروج من ملء الشاشة الكامل (إخفاء المتصفح وعناصر الموقع)
+    function toggleAppFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().then(() => {
+          document.body.classList.add('is-fullscreen');
+        }).catch(() => {
+          document.body.classList.toggle('is-fullscreen');
+        });
+      } else {
+        document.exitFullscreen().then(() => {
+          document.body.classList.remove('is-fullscreen');
+        }).catch(() => {
+          document.body.classList.remove('is-fullscreen');
+        });
+      }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) {
+        document.body.classList.remove('is-fullscreen');
+      } else {
+        document.body.classList.add('is-fullscreen');
+      }
+    });
+
+    let currentSelectedWordForDelete = "";
+
+    // إظهار بطاقة الكلمة المحفوظة وتجهيزها للحذف
+    function showWordDetail(word, meaning, sentence = "") {
+      currentSelectedWordForDelete = (word || "").trim();
+      document.getElementById('modalWordTitle').innerText = word;
+      document.getElementById('modalWordMeaning').innerText = meaning;
+      const sentBox = document.getElementById('modalSentenceBox');
+      if (sentence && sentence.trim()) {
+        sentBox.innerText = `"${sentence}"`;
+        sentBox.style.display = 'block';
+      } else {
+        sentBox.style.display = 'none';
+      }
+      document.getElementById('wordDetailModal').style.display = 'flex';
+    }
+
+    function closeWordDetailModal(e) {
+      if (e.target.id === 'wordDetailModal') {
+        document.getElementById('wordDetailModal').style.display = 'none';
+      }
+    }
+
+    // حذف الكلمة المحددة من الشاشة والحافظة والسحابة فوراً
+    function handleDeleteWordFromModal() {
+      if (!currentSelectedWordForDelete) return;
+      if (!confirm(`هل تريد بالتأكيد حذف مفردة "${currentSelectedWordForDelete}" وإزالة تظليلها؟`)) return;
+
+      const cleanWord = currentSelectedWordForDelete.toLowerCase().trim();
+
+      // 1. إزالة الهايلايتر فوراً من صفحات المانجا المعروضة
+      removeHighlightFromScreen(cleanWord);
+
+      // 2. حذف الكلمة من قاعدة بيانات المتصفح المحلية IndexedDB
+      if (db) {
+        const tx = db.transaction("words", "readwrite");
+        const store = tx.objectStore("words");
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const words = req.result || [];
+          words.filter(w => (w.word || "").toLowerCase().trim() === cleanWord).forEach(w => {
+            store.delete(w.id);
+          });
+          renderVocabByDays();
+        };
+      }
+
+      // 3. حذف الهايلايتر من التخزين المحلي
+      let stored = JSON.parse(localStorage.getItem("DODDE_HIGHLIGHTS") || "[]");
+      stored = stored.filter(h => (h.word || "").toLowerCase().trim() !== cleanWord);
+      localStorage.setItem("DODDE_HIGHLIGHTS", JSON.stringify(stored));
+
+      // 4. الحذف من سحابة Google الخاصة بالمستخدم
+      if (firestoreDB && currentAuthUser) {
+        const userDoc = firestoreDB.collection("users").doc(currentAuthUser.uid);
+        
+        userDoc.collection("words").where("word", "==", currentSelectedWordForDelete).get().then(snap => {
+          snap.forEach(d => d.ref.delete());
+        }).catch(()=>{});
+
+        userDoc.collection("highlights").where("word", "==", currentSelectedWordForDelete).get().then(snap => {
+          snap.forEach(d => d.ref.delete());
+        }).catch(()=>{});
+      }
+
+      // إغلاق النافذة المنبثقة
+      document.getElementById('wordDetailModal').style.display = 'none';
+      currentSelectedWordForDelete = "";
+    }
+
+
+
+
 
     function handleLoadFromInput() {
       const url = urlInput.value.trim();
@@ -1263,6 +1491,10 @@
         // حفظ الفصل بالمكتبة بغلاف أول صفحة
         saveToLibrary(url, data.images[0], currentChapterTitle, data.images.length);
 
+        // جاهزية عرض الصفحات الطبيعي
+
+
+
         data.images.forEach((imgUrl, idx) => {
           const wrapper = document.createElement('div');
           wrapper.className = 'page-wrapper';
@@ -1289,9 +1521,12 @@
           reader.appendChild(wrapper);
         });
 
+        // استرجاع ورسم كافة الهايلايتات المحفوظة الخاصة بهذه الصفحة عبر كل المانغات
+        applySavedMangaHighlights(url);
 
         // مراقبة الصفحة النشطة وتحديث تقدم القراءة تلقائياً أثناء التمرير
         setupPageTracker();
+
 
         // التمرير مباشرة للصفحة المستهدفة
         if (targetPage > 1) {
@@ -1326,6 +1561,9 @@
 
       document.querySelectorAll('.page-wrapper').forEach(p => trackerObserver.observe(p));
     }
+
+
+
 
     // ----------------- نمط التحديد والقص بدقة الشاشات -----------------
     function toggleCropMode() {
@@ -1662,20 +1900,37 @@
             });
           }
 
-          // إذا كانت الفقاعة تحتوي على كلمة محفوظة سابقاً، نضع الهايلايت الأحمر فوق صفحة المانجا مباشرة
+          // رسم خط نحيف ومحدد لموضع كل كلمة محفوظة مسبقاً دون تغطية كامل الفقاعة
           if (hasAnySavedWord && lastSelectedWrapper && lastRelativeBox) {
-            const layer = lastSelectedWrapper.querySelector('.manga-highlight-layer');
-            if (layer) {
-              const hl = document.createElement('div');
-              hl.className = 'manga-word-highlight';
-              hl.style.left = `${lastRelativeBox.left}%`;
-              hl.style.top = `${lastRelativeBox.top}%`;
-              hl.style.width = `${lastRelativeBox.width}%`;
-              hl.style.height = `${lastRelativeBox.height}%`;
-              hl.title = `تحتوي مفردات محفوظة: ${matchedSavedWords.join(', ')}`;
-              layer.appendChild(hl);
-            }
+            const fullText = (currentSentence || "").trim();
+            const textLen = Math.max(fullText.length, 1);
+
+            matchedSavedWords.forEach(savedWord => {
+              const cleanWord = (savedWord || "").trim();
+              const wordIndex = fullText.toLowerCase().indexOf(cleanWord.toLowerCase());
+              let verticalRatio = 0.4;
+              if (wordIndex !== -1) {
+                verticalRatio = Math.max(0.08, Math.min(0.82, (wordIndex / textLen)));
+              }
+
+              const calculatedTop = lastRelativeBox.top + (lastRelativeBox.height * verticalRatio);
+
+              const wordBox = {
+                left: lastRelativeBox.left + (lastRelativeBox.width * 0.12),
+                top: calculatedTop,
+                width: Math.min(Math.max(lastRelativeBox.width * 0.76, 25), 65),
+                height: 14,
+                word: cleanWord,
+                meaning: "محفوظة مسبقاً",
+                chapterUrl: currentChapterUrl,
+                page: parseInt(lastSelectedWrapper.dataset.page || "1", 10)
+              };
+              drawWordHighlightOnPage(lastSelectedWrapper, wordBox);
+            });
           }
+
+
+
 
 
           loader.style.display = 'none';
@@ -1720,21 +1975,119 @@
       const regex = new RegExp(`\\b(${word.trim()})\\b`, 'gi');
       engBox.innerHTML = engBox.innerHTML.replace(regex, `<span class="saved-highlight" style="color:#ef4444 !important; font-weight:800; text-decoration:underline;">$1</span>`);
 
-      // 2. وضع هايلايت أحمر ناعم داخل صفحة المانجا نفسها فوق الفقاعة المحددة
+      // 2. وضع هايلايت مخصص للكلمة فقط داخل صفحة المانجا بنسب دقيقة وليس المربع المقصوص كاملاً
       if (lastSelectedWrapper && lastRelativeBox) {
-        const layer = lastSelectedWrapper.querySelector('.manga-highlight-layer');
-        if (layer) {
-          const hl = document.createElement('div');
-          hl.className = 'manga-word-highlight';
-          hl.style.left = `${lastRelativeBox.left}%`;
-          hl.style.top = `${lastRelativeBox.top}%`;
-          hl.style.width = `${lastRelativeBox.width}%`;
-          hl.style.height = `${lastRelativeBox.height}%`;
-          hl.title = `كلمة محفوظة: ${word}`;
-          layer.appendChild(hl);
+        const pageNum = parseInt(lastSelectedWrapper.dataset.page || "1", 10);
+        
+        // حساب موضع السطر بدقة استناداً إلى مكان ظهور الكلمة داخل النص
+        const fullText = (currentSentence || "").trim();
+        const cleanWord = word.trim();
+        const wordIndex = fullText.toLowerCase().indexOf(cleanWord.toLowerCase());
+        const textLen = Math.max(fullText.length, 1);
+
+        let verticalRatio = 0.4;
+        if (wordIndex !== -1) {
+          verticalRatio = Math.max(0.08, Math.min(0.82, (wordIndex / textLen)));
         }
+
+        const calculatedTop = lastRelativeBox.top + (lastRelativeBox.height * verticalRatio);
+
+        const wordBox = {
+          left: lastRelativeBox.left + (lastRelativeBox.width * 0.12),
+          top: calculatedTop,
+          width: Math.min(Math.max(lastRelativeBox.width * 0.76, 25), 65),
+          height: 14,
+          word: cleanWord,
+          meaning: meaning.trim(),
+          sentence: currentSentence || "",
+          chapterUrl: currentChapterUrl,
+          page: pageNum
+        };
+
+
+
+
+
+        drawWordHighlightOnPage(lastSelectedWrapper, wordBox);
+        saveMangaHighlight(wordBox);
       }
     }
+
+    // دالة رسم الهايلايتر الدقيق للكلمة فقط وربطه بالبطاقة المنبثقة
+    function drawWordHighlightOnPage(wrapper, box) {
+      const layer = wrapper.querySelector('.manga-highlight-layer');
+      if (!layer) return;
+      
+      const hl = document.createElement('div');
+      hl.className = 'manga-word-highlight';
+      hl.style.left = `${box.left}%`;
+      hl.style.top = `${box.top}%`;
+      hl.style.width = `${box.width}%`;
+      hl.style.height = `${box.height}%`;
+      hl.title = box.word;
+      
+      // النقر على الهايلايتر لفتح بطاقة الكلمة بتصميم الموقع الأنيق
+      hl.onclick = (e) => {
+        e.stopPropagation();
+        showWordDetail(box.word, box.meaning || 'محفوظة بالحافظة', box.sentence || '');
+      };
+
+      layer.appendChild(hl);
+    }
+
+
+    // حفظ موقع ومفردة الهايلايت محلياً وسحابياً للمزامنة عبر كل الفصول
+    function saveMangaHighlight(box) {
+      if (!db) return;
+      const hlRecord = {
+        id: `hl_${btoa(unescape(encodeURIComponent(box.chapterUrl))).replace(/\//g,'_')}_p${box.page}_${box.word.toLowerCase()}`,
+        ...box
+      };
+      
+      try {
+        if (!db.objectStoreNames.contains("highlights")) {
+          // حفظ في الـ LocalStorage في حال عدم تحديث إصدار الداتابيس
+          const stored = JSON.parse(localStorage.getItem("DODDE_HIGHLIGHTS") || "[]");
+          stored.push(hlRecord);
+          localStorage.setItem("DODDE_HIGHLIGHTS", JSON.stringify(stored));
+        }
+      } catch(e) {}
+
+      if (firestoreDB && currentAuthUser) {
+        firestoreDB.collection("users").doc(currentAuthUser.uid).collection("highlights").doc(hlRecord.id).set(hlRecord).catch(()=>{});
+      }
+    }
+
+    // تطبيق الهايلايتات للفصل مع تنظيف الشاشة وضمان الارتفاع المناسب
+    function applySavedMangaHighlights(chapterUrl) {
+      // تفريغ أي هايلايتر معروض حالياً لتجنب التكرار
+      document.querySelectorAll('.manga-word-highlight').forEach(el => el.remove());
+
+      try {
+        const stored = JSON.parse(localStorage.getItem("DODDE_HIGHLIGHTS") || "[]");
+        stored.filter(h => h.chapterUrl === chapterUrl).forEach(box => {
+          box.height = 14;
+          const wrap = document.querySelector(`.page-wrapper[data-page='${box.page}']`);
+          if (wrap) drawWordHighlightOnPage(wrap, box);
+        });
+      } catch(e) {}
+
+      // التحقق من السحابة ورسم أي هايلايت محفوظ بحساب Google
+      if (firestoreDB && currentAuthUser) {
+        firestoreDB.collection("users").doc(currentAuthUser.uid).collection("highlights").where("chapterUrl", "==", chapterUrl).get().then(snap => {
+          if (!snap.empty) {
+            snap.forEach(doc => {
+              const box = doc.data();
+              box.height = 14;
+              const wrap = document.querySelector(`.page-wrapper[data-page='${box.page}']`);
+              if (wrap) drawWordHighlightOnPage(wrap, box);
+            });
+          }
+        }).catch(()=>{});
+      }
+    }
+
+
 
 
 
@@ -1801,16 +2154,32 @@
 
     function deleteSingleWord(id) {
       if (!db) return;
+      // استخراج الكلمة لحذف الهايلايتر التابع لها
+      const wordClean = id.split('_')[0].toLowerCase();
+
       const tx = db.transaction("words", "readwrite");
       tx.objectStore("words").delete(id);
       tx.oncomplete = () => {
         renderVocabByDays();
+
+        // 1. مسح الهايلايتر محلياً من شاشة المانجا
+        removeHighlightFromScreen(wordClean);
+
+        // 2. حذفه من التخزين المحلي
+        let stored = JSON.parse(localStorage.getItem("DODDE_HIGHLIGHTS") || "[]");
+        stored = stored.filter(h => h.word.toLowerCase() !== wordClean);
+        localStorage.setItem("DODDE_HIGHLIGHTS", JSON.stringify(stored));
+
+        // 3. حذفه من سحابة Google للمستخدم
         if (firestoreDB && currentAuthUser) {
-          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("words").doc(id).delete().catch(()=>{});
+          const userDoc = firestoreDB.collection("users").doc(currentAuthUser.uid);
+          userDoc.collection("words").doc(id).delete().catch(()=>{});
+          userDoc.collection("highlights").where("word", "==", wordClean).get().then(snap => {
+            snap.forEach(d => d.ref.delete());
+          }).catch(()=>{});
         }
       };
     }
-
 
     function deleteDayWords(dateStr) {
       if (!confirm(`هل أنت متأكد من حذف كلمات يوم ${dateStr}؟`)) return;
@@ -1819,27 +2188,63 @@
       const req = store.getAll();
       req.onsuccess = () => {
         const words = req.result || [];
-        words.filter(w => w.dateStr === dateStr).forEach(w => {
+        const wordsToDelete = words.filter(w => w.dateStr === dateStr);
+        wordsToDelete.forEach(w => {
           store.delete(w.id);
-          if (firestoreDB) firestoreDB.collection("vocabulary").doc(w.id).delete().catch(()=>{});
+          const wClean = w.word.toLowerCase().trim();
+          removeHighlightFromScreen(wClean);
+          if (firestoreDB && currentAuthUser) {
+            firestoreDB.collection("users").doc(currentAuthUser.uid).collection("words").doc(w.id).delete().catch(()=>{});
+          }
         });
+
+        // تنظيف الهايلايترات محلياً وسحابياً
+        const deletedCleanWords = wordsToDelete.map(w => w.word.toLowerCase().trim());
+        let stored = JSON.parse(localStorage.getItem("DODDE_HIGHLIGHTS") || "[]");
+        stored = stored.filter(h => !deletedCleanWords.includes(h.word.toLowerCase().trim()));
+        localStorage.setItem("DODDE_HIGHLIGHTS", JSON.stringify(stored));
+
         tx.oncomplete = () => renderVocabByDays();
       };
     }
 
     function clearAllVocab() {
-      if (!confirm("هل تريد تفريغ كل الكلمات المحفوظة في الحافظة نهائياً؟")) return;
+      if (!confirm("هل تريد تفريغ كل الكلمات والهايلايترات نهائياً؟")) return;
       const tx = db.transaction("words", "readwrite");
       tx.objectStore("words").clear();
       tx.oncomplete = () => {
         renderVocabByDays();
-        if (firestoreDB) {
-          firestoreDB.collection("vocabulary").get().then(snap => {
+
+        // 1. إزالة جميع الهايلايترات من صفحات المانجا فوراً
+        document.querySelectorAll('.manga-word-highlight').forEach(el => el.remove());
+
+        // 2. مسح الهايلايترات محلياً
+        localStorage.removeItem("DODDE_HIGHLIGHTS");
+
+        // 3. حذف جميع الكلمات والهايلايترات من سحابة Google للمستخدم
+        if (firestoreDB && currentAuthUser) {
+          const userDoc = firestoreDB.collection("users").doc(currentAuthUser.uid);
+          
+          userDoc.collection("words").get().then(snap => {
+            snap.forEach(doc => doc.ref.delete());
+          }).catch(()=>{});
+
+          userDoc.collection("highlights").get().then(snap => {
             snap.forEach(doc => doc.ref.delete());
           }).catch(()=>{});
         }
       };
     }
+
+    // إزالة عناصر الهايلايت من الشاشة لكلمة محددة
+    function removeHighlightFromScreen(cleanWord) {
+      document.querySelectorAll('.manga-word-highlight').forEach(el => {
+        if ((el.title || "").toLowerCase().trim() === cleanWord) {
+          el.remove();
+        }
+      });
+    }
+
 
     function exportDayAnki(dateStr) {
       if (!db) return;
