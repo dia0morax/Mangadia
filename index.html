@@ -2,7 +2,8 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=4.0, user-scalable=yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
   <title>dodde manga</title>
 
   
@@ -316,7 +317,13 @@
       z-index: 5;
     }
 
-    /* ================= منطقة القراءة ================= */
+    /* ================= إطار المانجا المعزول للزووم ================= */
+    #readerView {
+      overflow: hidden;
+      touch-action: none; /* يتم التحكم بالزووم والتحريك برمجياً بنعومة تامة */
+      position: relative;
+      width: 100%;
+    }
     #reader {
       width: 100%;
       max-width: 800px;
@@ -325,7 +332,10 @@
       flex-direction: column;
       align-items: center;
       min-height: 80vh;
+      transform-origin: 0 0;
+      will-change: transform;
     }
+
     .page-wrapper {
       width: 100%;
       position: relative;
@@ -337,8 +347,12 @@
       display: block;
       background: #111827;
       min-height: 250px;
+      -webkit-touch-callout: none !important; /* منع ظهور قائمة حفظ الصورة في آيفون وأندرويد */
+      -webkit-user-select: none !important;
+      user-select: none !important;
+      -webkit-user-drag: none !important;
     }
-    /* طبقة الهايلايت للكلمات المحفوظة */
+    /* طبقة الهايلايت والالتقاط الذكي */
     .manga-highlight-layer {
       position: absolute;
       top: 0;
@@ -348,6 +362,41 @@
       pointer-events: none;
       z-index: 10;
     }
+
+    /* المربع الوهمي التفاعلي الذي يظهر فوراً أثناء الضغط المطول ليوضح لك ما سيتم ترجمته */
+    .smart-target-box {
+      position: absolute;
+      border: 2px dashed #38bdf8;
+      background: rgba(56, 189, 248, 0.14);
+      border-radius: 12px;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+      pointer-events: none;
+      z-index: 20;
+      transition: transform 0.15s ease-out, opacity 0.15s ease;
+      animation: targetBoxBlink 0.8s infinite alternate ease-in-out;
+    }
+    @keyframes targetBoxBlink {
+      0% { border-color: #38bdf8; background: rgba(56, 189, 248, 0.12); }
+      100% { border-color: #60a5fa; background: rgba(56, 189, 248, 0.24); }
+    }
+
+    /* وميض تثبيت الالتقاط بعد انتهاء المدة */
+    .bubble-detect-pulse {
+      position: absolute;
+      border: 2.5px solid #10b981;
+      background: rgba(16, 185, 129, 0.22);
+      border-radius: 12px;
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.6);
+      animation: pulseBubble 0.65s ease-out forwards;
+      pointer-events: none;
+      z-index: 25;
+    }
+    @keyframes pulseBubble {
+      0% { transform: scale(0.96); opacity: 1; }
+      100% { transform: scale(1.04); opacity: 0; }
+    }
+
+
     /* هايلايت ماركر شفاف ومقفل الارتفاع لسطر واحد بدون أي خطوط مصمتة */
     .manga-word-highlight {
       position: absolute !important;
@@ -370,25 +419,39 @@
 
     @keyframes highlightFade { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
-    /* وضع ملء الشاشة الكامل مع دعم التكبير والتحريك الحر بإصبعين */
+    /* وضع ملء الشاشة الانغماسي النظيف مع الحفاظ على حرية زووم المتصفح */
     body.is-fullscreen header,
     body.is-fullscreen .fab-group,
-    body.is-fullscreen #errorBadge {
+    body.is-fullscreen #errorBadge,
+    body.is-fullscreen .page-indicator {
       display: none !important;
     }
     body.is-fullscreen {
-      touch-action: pan-x pan-y pinch-zoom !important;
+      background: #000 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow-x: visible !important;
     }
     body.is-fullscreen #readerView {
       padding: 0 !important;
       margin: 0 !important;
       max-width: 100% !important;
-      touch-action: pan-x pan-y pinch-zoom !important;
+      width: 100% !important;
     }
     body.is-fullscreen #reader {
       max-width: 100% !important;
-      touch-action: pan-x pan-y pinch-zoom !important;
+      width: 100% !important;
     }
+    body.is-fullscreen .manga-page {
+      width: 100% !important;
+      max-width: 100% !important;
+      display: block !important;
+    }
+
+
+
+
+
 
 
     /* زر الخروج الزجاجي الصغير بالزاوية أثناء ملء الشاشة */
@@ -515,25 +578,34 @@
       touch-action: none;
     }
 
-    /* ================= بطاقة الترجمة السفلية ================= */
+    /* ================= بطاقة الترجمة كطبقة خارجية مستقلة تماماً ================= */
     #bottomSheet {
       position: fixed;
       bottom: -100%;
       left: 0;
       right: 0;
-      max-height: 80vh;
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+      max-height: 75vh;
+      box-sizing: border-box;
       background: rgba(15, 23, 42, 0.96);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border-top: 2px solid #38bdf8;
       border-radius: 24px 24px 0 0;
-      z-index: 110;
-      padding: 20px;
-      box-shadow: 0 -12px 36px rgba(0,0,0,0.7);
-      transition: bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 9999; /* طبقة علوية مطلقة لا تتأثر بالصفحة */
+      padding: 18px;
+      box-shadow: 0 -12px 36px rgba(0,0,0,0.8);
       overflow-y: auto;
+      transition: bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    #bottomSheet.open { bottom: 0; }
+
+    #bottomSheet.open {
+      bottom: 0;
+    }
+
+
     .sheet-header {
       display: flex;
       justify-content: space-between;
@@ -831,8 +903,10 @@
     <button class="fab fab-home" id="homeFab" onclick="showLibraryView()" style="display:none;" title="العودة للمكتبة"><i class="fa-solid fa-house"></i></button>
     <button class="fab" id="fullscreenFab" onclick="toggleAppFullscreen()" style="display:none; background: linear-gradient(135deg, #0284c7, #0369a1);" title="ملء الشاشة بالكامل"><i class="fa-solid fa-expand"></i></button>
     <button class="fab fab-vocab" onclick="openVocabModal()" title="حافظة الأيام وأنكي"><i class="fa-solid fa-graduation-cap"></i></button>
-    <button class="fab fab-crop" id="cropToggleBtn" onclick="toggleCropMode()" style="display:none;" title="تحديد فقاعة للترجمة"><i class="fa-solid fa-crop-simple"></i></button>
+    <button class="fab fab-crop" id="cropToggleBtn" onclick="toggleCropMode()" style="display:none;" title="قص يدوي احتياطي"><i class="fa-solid fa-crop-simple"></i></button>
   </div>
+
+
 
   <!-- نافذة عرض تفاصيل المفردة المحفوظة بتصميم الموقع الأنيق -->
   <div id="wordDetailModal" class="modal-overlay" onclick="closeWordDetailModal(event)">
@@ -875,6 +949,8 @@
   </div>
 
   <canvas id="selectionCanvas"></canvas>
+
+
 
   <!-- نافذة الترجمة السفلية -->
   <div id="bottomSheet">
@@ -957,10 +1033,14 @@
     const reader = document.getElementById('reader');
     const urlInput = document.getElementById('urlInput');
     const loadBtn = document.getElementById('loadBtn');
-    const cropBtn = document.getElementById('cropToggleBtn');
     const homeFab = document.getElementById('homeFab');
+    const cropBtn = document.getElementById('cropToggleBtn');
     const canvas = document.getElementById('selectionCanvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas ? canvas.getContext('2d') : null;
+    let isCropMode = false;
+    let cropStartX = 0, cropStartY = 0, cropEndX = 0, cropEndY = 0;
+    let isManualDrawing = false;
+
     const bottomSheet = document.getElementById('bottomSheet');
     const sheetContent = document.getElementById('sheetContent');
     const loader = document.getElementById('loader');
@@ -976,11 +1056,9 @@
     let currentChapterUrl = "";
     let currentChapterTitle = "";
     let currentChapterImages = [];
-    let isCropMode = false;
-    let startX = 0, startY = 0, endX = 0, endY = 0;
-    let isDrawing = false;
     let currentSentence = "";
     let currentTranslation = "";
+
 
     // ----------------- سجل الأخطاء -----------------
     let errorLogs = [];
@@ -1123,31 +1201,36 @@
       }
     }
 
-    // مزامنة شاملة ثنائية الاتجاه مع حساب Google (رفع المحلي وتنزيل السحابي)
+    // مزامنة شاملة ثنائية الاتجاه مع حساب Google وضمان عرض الكلمات في الحافظة
     async function syncUserDataFromCloud(uid) {
       if (!firestoreDB || !uid) return;
 
       const userDoc = firestoreDB.collection("users").doc(uid);
 
-      // 1. رفع الكلمات المحلية للسحابة وتنزيل ما في السحابة
-      if (db) {
-        const localTx = db.transaction("words", "readonly");
-        const wordsReq = localTx.objectStore("words").getAll();
-        wordsReq.onsuccess = async () => {
-          const localWords = wordsReq.result || [];
-          for (const w of localWords) {
-            userDoc.collection("words").doc(w.id).set(w).catch(e => logError("Upload Word Error", e));
-          }
-        };
-      }
-
+      // 1. فحص وجلب الكلمات السحابية وتخزينها محلياً وتحديث الحافظة فوراً
       userDoc.collection("words").get().then(snap => {
         if (!snap.empty && db) {
           const tx = db.transaction("words", "readwrite");
           const store = tx.objectStore("words");
           snap.forEach(doc => store.put(doc.data()));
+          tx.oncomplete = () => {
+            renderVocabByDays(); // تحديث فوري للحافظة
+          };
         }
       }).catch(err => logError("Sync Words Cloud", err.message));
+
+      // 2. رفع أي كلمات محلية جديدة في الهاتف للسحابة
+      if (db) {
+        const localTx = db.transaction("words", "readonly");
+        const wordsReq = localTx.objectStore("words").getAll();
+        wordsReq.onsuccess = () => {
+          const localWords = wordsReq.result || [];
+          localWords.forEach(w => {
+            userDoc.collection("words").doc(w.id).set(w).catch(()=>{});
+          });
+        };
+      }
+
 
       // 2. مزامنة الهايلايتات مع السحابة
       const localHighlights = JSON.parse(localStorage.getItem("DODDE_HIGHLIGHTS") || "[]");
@@ -1346,8 +1429,8 @@
       document.body.classList.remove('is-fullscreen');
       libraryView.style.display = 'block';
       readerView.style.display = 'none';
-      cropBtn.style.display = 'none';
       homeFab.style.display = 'none';
+      if (cropBtn) cropBtn.style.display = 'none';
       if (fullscreenFab) fullscreenFab.style.display = 'none';
       window.scrollTo({ top: 0, behavior: 'smooth' });
       renderLibrary();
@@ -1357,35 +1440,19 @@
     function showReaderView() {
       libraryView.style.display = 'none';
       readerView.style.display = 'block';
-      cropBtn.style.display = 'flex';
       homeFab.style.display = 'flex';
+      if (cropBtn) cropBtn.style.display = 'flex';
       if (fullscreenFab) fullscreenFab.style.display = 'flex';
     }
 
-    // الدخول والخروج من ملء الشاشة الكامل (إخفاء المتصفح وعناصر الموقع)
+
+
+    // تبديل وضع ملء الشاشة البصري النقي دون تعطيل محرك زووم المتصفح
     function toggleAppFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().then(() => {
-          document.body.classList.add('is-fullscreen');
-        }).catch(() => {
-          document.body.classList.toggle('is-fullscreen');
-        });
-      } else {
-        document.exitFullscreen().then(() => {
-          document.body.classList.remove('is-fullscreen');
-        }).catch(() => {
-          document.body.classList.remove('is-fullscreen');
-        });
-      }
+      document.body.classList.toggle('is-fullscreen');
     }
 
-    document.addEventListener('fullscreenchange', () => {
-      if (!document.fullscreenElement) {
-        document.body.classList.remove('is-fullscreen');
-      } else {
-        document.body.classList.add('is-fullscreen');
-      }
-    });
+
 
     let currentSelectedWordForDelete = "";
 
@@ -1565,13 +1632,24 @@
 
 
 
-    // ----------------- نمط التحديد والقص بدقة الشاشات -----------------
+    // ----------------- نظام القص اليدوي الاحترازي + الضغط المطول الذكي -----------------
+    let lastSelectedWrapper = null;
+    let lastRelativeBox = null;
+    let longPressTimer = null;
+    let previewDelayTimer = null;
+    let touchStartPos = { x: 0, y: 0 };
+    let hasMoved = false;
+    let activePreviewBoxEl = null;
+
+    // 1. تشغيل وإيقاف نمط القص اليدوي بالأصبع
     function toggleCropMode() {
+      if (!canvas) return;
       isCropMode = !isCropMode;
       cropBtn.classList.toggle('active', isCropMode);
       cropBtn.innerHTML = isCropMode ? '<i class="fa-solid fa-xmark"></i>' : '<i class="fa-solid fa-crop-simple"></i>';
-      
+
       if (isCropMode) {
+        cancelLongPress();
         const dpr = window.devicePixelRatio || 1;
         canvas.width = window.innerWidth * dpr;
         canvas.height = window.innerHeight * dpr;
@@ -1588,71 +1666,62 @@
       }
     }
 
-    function getTouchPos(e) {
-      const t = (e.touches && e.touches.length > 0) ? e.touches[0] : (e.changedTouches ? e.changedTouches[0] : e);
-      return { x: t.clientX, y: t.clientY };
+    // 2. أحداث رسم مربع القص اليدوي على الكانفاس
+    if (canvas) {
+      canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        isManualDrawing = true;
+        const t = e.touches[0];
+        cropStartX = t.clientX;
+        cropStartY = t.clientY;
+        cropEndX = t.clientX;
+        cropEndY = t.clientY;
+      }, { passive: false });
+
+      canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (!isManualDrawing) return;
+        const t = e.touches[0];
+        cropEndX = t.clientX;
+        cropEndY = t.clientY;
+
+        const left = Math.min(cropStartX, cropEndX);
+        const top = Math.min(cropStartY, cropEndY);
+        const w = Math.abs(cropEndX - cropStartX);
+        const h = Math.abs(cropEndY - cropStartY);
+
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+        ctx.clearRect(left, top, w, h);
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(left, top, w, h);
+      }, { passive: false });
+
+      canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        if (!isManualDrawing) return;
+        isManualDrawing = false;
+
+        const left = Math.min(cropStartX, cropEndX);
+        const top = Math.min(cropStartY, cropEndY);
+        const w = Math.abs(cropEndX - cropStartX);
+        const h = Math.abs(cropEndY - cropStartY);
+
+        toggleCropMode();
+        if (w > 15 && h > 15) {
+          executeManualAreaCrop(left, top, w, h);
+        }
+      }, { passive: false });
     }
 
-    canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      isDrawing = true;
-      const pos = getTouchPos(e);
-      startX = pos.x;
-      startY = pos.y;
-      endX = pos.x;
-      endY = pos.y;
-    }, { passive: false });
-
-    canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      if (!isDrawing) return;
-      const pos = getTouchPos(e);
-      endX = pos.x;
-      endY = pos.y;
-      
-      const left = Math.min(startX, endX);
-      const top = Math.min(startY, endY);
-      const w = Math.abs(endX - startX);
-      const h = Math.abs(endY - startY);
-
-      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-      
-      ctx.clearRect(left, top, w, h);
-      ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(left, top, w, h);
-    }, { passive: false });
-
-    canvas.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      if (!isDrawing) return;
-      isDrawing = false;
-
-      const pos = getTouchPos(e);
-      endX = pos.x;
-      endY = pos.y;
-
-      const left = Math.min(startX, endX);
-      const top = Math.min(startY, endY);
-      const w = Math.abs(endX - startX);
-      const h = Math.abs(endY - startY);
-      
-      toggleCropMode();
-
-      if (w < 15 || h < 15) return;
-      captureArea(left, top, w, h);
-    }, { passive: false });
-
-    let lastSelectedWrapper = null;
-    let lastRelativeBox = null;
-
-    function captureArea(x, y, w, h) {
+    // 3. اقتصاص الصورة وإرسالها للترجمة عند الانتهاء من الرسم اليدوي
+    function executeManualAreaCrop(x, y, w, h) {
       const centerX = x + w / 2;
       const centerY = y + h / 2;
       const elements = document.elementsFromPoint(centerX, centerY);
-      
       let imgElem = null;
       for (const el of elements) {
         if (el.tagName === 'IMG' && el.classList.contains('manga-page')) {
@@ -1660,38 +1729,13 @@
           break;
         }
       }
-
-      if (!imgElem) {
-        const testPoints = [
-          [x + 2, y + 2],
-          [x + w - 2, y + 2],
-          [x + 2, y + h - 2],
-          [x + w - 2, y + h - 2]
-        ];
-        for (const [px, py] of testPoints) {
-          const els = document.elementsFromPoint(px, py);
-          for (const el of els) {
-            if (el.tagName === 'IMG' && el.classList.contains('manga-page')) {
-              imgElem = el;
-              break;
-            }
-          }
-          if (imgElem) break;
-        }
-      }
-
-      if (!imgElem) {
-        logError("تعذر التقاط الصورة فوق المانجا", { x, y, w, h });
-        alert("يرجى التأكد من التحديد فوق صفحة المانجا.");
-        return;
-      }
+      if (!imgElem) return;
 
       lastSelectedWrapper = imgElem.closest('.page-wrapper');
       const imgRect = imgElem.getBoundingClientRect();
       const scaleX = imgElem.naturalWidth / imgRect.width;
       const scaleY = imgElem.naturalHeight / imgRect.height;
 
-      // حفظ موقع الفقاعة بنسبة مئوية لوضع الهايلايت الأحمر فوق المانجا
       lastRelativeBox = {
         left: ((x - imgRect.left) / imgRect.width) * 100,
         top: ((y - imgRect.top) / imgRect.height) * 100,
@@ -1716,10 +1760,285 @@
         const base64Data = tempCanvas.toDataURL('image/jpeg', 0.95);
         sendToTranslate(base64Data);
       } catch (err) {
-        logError("خطأ في اقتصاص الكانفاس", err);
-        alert("فشل التقاط الصورة: " + err.message);
+        logError("Manual Crop Error", err.message);
       }
     }
+
+    // منع قائمة السياق الافتراضية وحفظ الصورة عند الضغط المطول
+    window.addEventListener('contextmenu', (e) => {
+      if (e.target.tagName === 'IMG' || e.target.closest('#reader')) {
+        e.preventDefault();
+        return false;
+      }
+    });
+
+    // ================= محرك الزووم والتحريك المعزول لصفحات المانجا فقط =================
+    let mangaScale = 1;
+    let mangaPanX = 0;
+    let mangaPanY = 0;
+    let startPinchDist = 0;
+    let startScale = 1;
+    let pinchCenter = { x: 0, y: 0 };
+    let lastPanPos = { x: 0, y: 0 };
+    let isPinching = false;
+    let isPanning = false;
+
+    function updateMangaTransform() {
+      if (!reader) return;
+      // منع الخروج عن حدود الإطار عند التصغير
+      if (mangaScale <= 1) {
+        mangaScale = 1;
+        mangaPanX = 0;
+      }
+      reader.style.transform = `translate(${mangaPanX}px, ${mangaPanY}px) scale(${mangaScale})`;
+    }
+
+    const readerViewEl = document.getElementById('readerView');
+
+    readerViewEl.addEventListener('touchstart', (e) => {
+      if (isCropMode) return;
+
+      // عند لمس إصبعين: بدء الزوم على موضع الأصابع
+      if (e.touches.length === 2) {
+        cancelLongPress();
+        isPinching = true;
+        isPanning = false;
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        startPinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        startScale = mangaScale;
+        pinchCenter = {
+          x: (t1.clientX + t2.clientX) / 2,
+          y: (t1.clientY + t2.clientY) / 2
+        };
+        return;
+      }
+
+      // عند لمس إصبع واحد
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        touchStartPos = { x: touch.clientX, y: touch.clientY };
+        lastPanPos = { x: touch.clientX, y: touch.clientY };
+        hasMoved = false;
+
+        // إذا كانت المانجا مكبرة، يصبح الإصبع للتحريك الأفقي
+        if (mangaScale > 1) {
+          isPanning = true;
+        }
+
+        const targetImg = getMangaImageAtPoint(touch.clientX, touch.clientY);
+        if (!targetImg) return;
+
+        const calcBox = calculateBubbleBox(touch.clientX, touch.clientY, targetImg);
+        const wrapper = targetImg.closest('.page-wrapper');
+
+        previewDelayTimer = setTimeout(() => {
+          if (!hasMoved && !isCropMode && !isPinching) {
+            showTargetPreview(wrapper, calcBox);
+          }
+        }, 160);
+
+        longPressTimer = setTimeout(() => {
+          if (!hasMoved && !isCropMode && !isPinching) {
+            if (navigator.vibrate) navigator.vibrate(50);
+            removeTargetPreview();
+            triggerSmartBubbleDetection(touch.clientX, touch.clientY, targetImg, calcBox);
+          }
+        }, 480);
+      }
+    }, { passive: false });
+
+    readerViewEl.addEventListener('touchmove', (e) => {
+      // إدارة الزووم اللمسي بإصبعين
+      if (isPinching && e.touches.length === 2) {
+        e.preventDefault();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const factor = currentDist / startPinchDist;
+        mangaScale = Math.min(Math.max(1, startScale * factor), 4.0); // تكبير حر وسلس حتى 4x
+        updateMangaTransform();
+        return;
+      }
+
+      // تحريك المانجا أفقياً عند التكبير بإصبع واحد
+      if (isPanning && e.touches.length === 1 && mangaScale > 1) {
+        const touch = e.touches[0];
+        const dx = touch.clientX - lastPanPos.x;
+        mangaPanX += dx;
+        lastPanPos = { x: touch.clientX, y: touch.clientY };
+        updateMangaTransform();
+      }
+
+      // إلغاء الضغط المطول عند التمرير
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        if (Math.abs(touch.clientX - touchStartPos.x) > 10 || Math.abs(touch.clientY - touchStartPos.y) > 10) {
+          hasMoved = true;
+          cancelLongPress();
+        }
+      }
+    }, { passive: false });
+
+    readerViewEl.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) isPinching = false;
+      if (e.touches.length === 0) isPanning = false;
+      cancelLongPress();
+    }, { passive: true });
+
+    // نقر مزدوج لإعادة ضبط زووم المانجا للحجم الطبيعي
+    let lastMangaTap = 0;
+    readerViewEl.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastMangaTap < 280 && e.touches.length === 0) {
+        mangaScale = 1;
+        mangaPanX = 0;
+        mangaPanY = 0;
+        updateMangaTransform();
+      }
+      lastMangaTap = now;
+    }, { passive: true });
+
+
+
+    // دعم الماوس للحواسيب
+    let mouseTimer = null;
+    document.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      const targetImg = getMangaImageAtPoint(e.clientX, e.clientY);
+      if (!targetImg) return;
+
+      const calcBox = calculateBubbleBox(e.clientX, e.clientY, targetImg);
+      const wrapper = targetImg.closest('.page-wrapper');
+      showTargetPreview(wrapper, calcBox);
+
+      mouseTimer = setTimeout(() => {
+        removeTargetPreview();
+        triggerSmartBubbleDetection(e.clientX, e.clientY, targetImg, calcBox);
+      }, 450);
+    });
+    document.addEventListener('mousemove', () => {
+      if (mouseTimer) {
+        clearTimeout(mouseTimer);
+        removeTargetPreview();
+      }
+    });
+    document.addEventListener('mouseup', () => {
+      if (mouseTimer) {
+        clearTimeout(mouseTimer);
+        removeTargetPreview();
+      }
+    });
+
+    function cancelLongPress() {
+      clearTimeout(previewDelayTimer);
+      clearTimeout(longPressTimer);
+      removeTargetPreview();
+    }
+
+
+    function getMangaImageAtPoint(x, y) {
+      const elements = document.elementsFromPoint(x, y);
+      for (const el of elements) {
+        if (el.tagName === 'IMG' && el.classList.contains('manga-page')) return el;
+      }
+      return null;
+    }
+
+    // حساب حدود المربع حول الكلمة والفقاعة بدقة
+    function calculateBubbleBox(clientX, clientY, imgElem) {
+      const imgRect = imgElem.getBoundingClientRect();
+      const touchRelX = (clientX - imgRect.left) / imgRect.width;
+      const touchRelY = (clientY - imgRect.top) / imgRect.height;
+
+      const boxWidthPercent = 38;
+      const boxHeightPercent = 22;
+
+      let leftPercent = Math.max(1, (touchRelX * 100) - (boxWidthPercent / 2));
+      let topPercent = Math.max(1, (touchRelY * 100) - (boxHeightPercent / 2));
+
+      if (leftPercent + boxWidthPercent > 99) leftPercent = 99 - boxWidthPercent;
+      if (topPercent + boxHeightPercent > 99) topPercent = 99 - boxHeightPercent;
+
+      return {
+        left: leftPercent,
+        top: topPercent,
+        width: boxWidthPercent,
+        height: boxHeightPercent
+      };
+    }
+
+    // رسم المربع الوهمي التفاعلي المؤقت أثناء الضغط
+    function showTargetPreview(wrapper, box) {
+      removeTargetPreview();
+      if (!wrapper) return;
+      const layer = wrapper.querySelector('.manga-highlight-layer');
+      if (!layer) return;
+
+      activePreviewBoxEl = document.createElement('div');
+      activePreviewBoxEl.className = 'smart-target-box';
+      activePreviewBoxEl.style.left = `${box.left}%`;
+      activePreviewBoxEl.style.top = `${box.top}%`;
+      activePreviewBoxEl.style.width = `${box.width}%`;
+      activePreviewBoxEl.style.height = `${box.height}%`;
+
+      layer.appendChild(activePreviewBoxEl);
+    }
+
+    function removeTargetPreview() {
+      if (activePreviewBoxEl) {
+        activePreviewBoxEl.remove();
+        activePreviewBoxEl = null;
+      }
+    }
+
+    // تنفيذ الالتقاط التلقائي والترجمة
+    function triggerSmartBubbleDetection(clientX, clientY, imgElem, box) {
+      lastSelectedWrapper = imgElem.closest('.page-wrapper');
+      lastRelativeBox = box;
+
+      // وميض تأكيد الالتقاط باللون الأخضر/الأزرق
+      showBubblePulse(lastSelectedWrapper, lastRelativeBox);
+
+      const scaleX = imgElem.naturalWidth / imgElem.clientWidth;
+      const scaleY = imgElem.naturalHeight / imgElem.clientHeight;
+
+      const cropX = (box.left / 100) * imgElem.naturalWidth;
+      const cropY = (box.top / 100) * imgElem.naturalHeight;
+      const cropW = (box.width / 100) * imgElem.naturalWidth;
+      const cropH = (box.height / 100) * imgElem.naturalHeight;
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = Math.max(cropW, 10);
+      tempCanvas.height = Math.max(cropH, 10);
+      const tCtx = tempCanvas.getContext('2d');
+
+      try {
+        tCtx.drawImage(imgElem, cropX, cropY, cropW, cropH, 0, 0, tempCanvas.width, tempCanvas.height);
+        const base64Data = tempCanvas.toDataURL('image/jpeg', 0.95);
+        sendToTranslate(base64Data);
+      } catch (err) {
+        logError("Smart Bubble Crop Error", err.message);
+      }
+    }
+
+    function showBubblePulse(wrapper, box) {
+      if (!wrapper) return;
+      const layer = wrapper.querySelector('.manga-highlight-layer');
+      if (!layer) return;
+
+      const pulse = document.createElement('div');
+      pulse.className = 'bubble-detect-pulse';
+      pulse.style.left = `${box.left}%`;
+      pulse.style.top = `${box.top}%`;
+      pulse.style.width = `${box.width}%`;
+      pulse.style.height = `${box.height}%`;
+
+      layer.appendChild(pulse);
+      setTimeout(() => pulse.remove(), 700);
+    }
+
+
 
 
     // ----------------- نظام التحقق وربط حساب Google السحابي -----------------
@@ -1782,26 +2101,8 @@
       }
     }
 
-    // مزامنة السحابة تلقائياً بعد تسجيل الدخول
-    function syncUserDataFromCloud(uid) {
-      if (!firestoreDB) return;
-      firestoreDB.collection("users").doc(uid).collection("vocabulary").get().then(snap => {
-        if (!snap.empty && db) {
-          const tx = db.transaction("words", "readwrite");
-          const store = tx.objectStore("words");
-          snap.forEach(doc => store.put(doc.data()));
-        }
-      }).catch(err => logError("Cloud Sync Vocab", err.message));
+    // تم التوحيد مع الدالة الرئيسية بنجاح
 
-      firestoreDB.collection("users").doc(uid).collection("library").get().then(snap => {
-        if (!snap.empty && db) {
-          const tx = db.transaction("library", "readwrite");
-          const store = tx.objectStore("library");
-          snap.forEach(doc => store.put(doc.data()));
-          tx.oncomplete = () => { renderLibrary(); checkLastRead(); };
-        }
-      }).catch(err => logError("Cloud Sync Library", err.message));
-    }
 
     // دالة جلب كافة الكلمات المحفوظة لمقارنتها وتمييزها بالأحمر
     function getAllWords(callback) {
@@ -1823,6 +2124,9 @@
       bottomSheet.classList.add('open');
       sheetContent.style.display = 'none';
       loader.style.display = 'block';
+
+
+
 
       try {
         const res = await fetch(`${BACKEND_URL}/api/ocr-translate`, {
@@ -2094,6 +2398,9 @@
     function closeSheet() {
       bottomSheet.classList.remove('open');
     }
+
+
+
 
     // ----------------- الحافظة المقسمة حسب الأيام وتصدير Anki -----------------
     function openVocabModal() {
