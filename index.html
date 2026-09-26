@@ -1289,9 +1289,12 @@
             tx.oncomplete = () => {
               if (typeof renderLibrary === 'function') renderLibrary();
             };
+          } else {
+            if (typeof renderLibrary === 'function') renderLibrary();
           }
         }, (err) => logError("Realtime Library Sync", err.message));
         cloudUnsubscribers.push(unsubLibrary);
+
 
         const unsubHistory = userDoc.collection("history").doc("lastRead").onSnapshot((doc) => {
           if (doc.exists && db) {
@@ -1325,10 +1328,11 @@
         }
       }
 
+      function getSafeDocId(str) {
+        return encodeURIComponent(str).replace(/\./g, '%2E').replace(/\//g, '%2F');
+      }
+
       function saveToLibrary(url, coverUrl, title, totalPages) {
-        if (!db) return;
-        const tx = db.transaction("library", "readwrite");
-        const store = tx.objectStore("library");
         const record = {
           url,
           coverUrl,
@@ -1337,18 +1341,39 @@
           lastPage: 1,
           updatedAt: Date.now()
         };
-        store.put(record);
-        tx.oncomplete = () => {
-          renderLibrary();
-          // رفع الفصل لسحابة حساب المستخدم المسجل فوراً
-          if (firestoreDB && currentAuthUser) {
-            const docId = btoa(unescape(encodeURIComponent(url))).replace(/\//g, '_');
-            firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId).set(record).catch(()=>{});
-          }
-        };
+
+        // 1. رفع الفصل ومزامنته فوراً في سحابة حساب Google Firestore
+        if (firestoreDB && currentAuthUser) {
+          const docId = getSafeDocId(url);
+          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId).set(record, { merge: true }).then(() => {
+            renderLibrary();
+          }).catch(e => logError("Cloud Save Library", e));
+        }
+
+        // 2. الحفظ في الذاكرة المحلية كمرجع سريع
+        if (db) {
+          const tx = db.transaction("library", "readwrite");
+          const store = tx.objectStore("library");
+          store.put(record);
+          tx.oncomplete = () => {
+            renderLibrary();
+          };
+        }
       }
 
+
       function updateLastReading(url, pageNum) {
+        if (firestoreDB && currentAuthUser) {
+          const docId = getSafeDocId(url);
+          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId).get().then(doc => {
+            const item = doc.exists ? doc.data() : { url, lastPage: pageNum, updatedAt: Date.now() };
+            item.lastPage = pageNum;
+            item.updatedAt = Date.now();
+            firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId).set(item, { merge: true }).catch(()=>{});
+            firestoreDB.collection("users").doc(currentAuthUser.uid).collection("history").doc("lastRead").set(item).catch(()=>{});
+          }).catch(()=>{});
+        }
+
         if (!db) return;
         const tx = db.transaction(["library", "history"], "readwrite");
         const libStore = tx.objectStore("library");
@@ -1363,15 +1388,10 @@
             libStore.put(item);
             histStore.put({ key: "lastRead", data: item });
             checkLastRead();
-
-            if (firestoreDB && currentAuthUser) {
-              const docId = btoa(unescape(encodeURIComponent(url))).replace(/\//g, '_');
-              firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId).set(item).catch(()=>{});
-              firestoreDB.collection("users").doc(currentAuthUser.uid).collection("history").doc("lastRead").set(item).catch(()=>{});
-            }
           }
         };
       }
+
 
 
 
@@ -1484,19 +1504,24 @@
         const url = decodeURIComponent(encodedUrl);
         if (!confirm("هل تريد حذف هذا الفصل وجميع صوره نهائياً من حسابك وجهازك؟")) return;
 
-        // 1. الحذف الجذري والنهائي من سحابة Google Firestore لحماية باقتك المجانية
+        // 1. الحذف الجذري والنهائي من سحابة Google Firestore بالمعرف الآمن
         if (firestoreDB && currentAuthUser) {
           const userDoc = firestoreDB.collection("users").doc(currentAuthUser.uid);
-          const docId = btoa(unescape(encodeURIComponent(url))).replace(/\//g, '_');
+          const docId = getSafeDocId(url);
           
-          userDoc.collection("library").doc(docId).delete().catch(e => logError("Cloud Delete Book", e));
+          userDoc.collection("library").doc(docId).delete().then(() => {
+            renderLibrary();
+          }).catch(e => logError("Cloud Delete Book", e));
 
           userDoc.collection("history").doc("lastRead").get().then(doc => {
             if (doc.exists && doc.data() && doc.data().url === url) {
-              userDoc.collection("history").doc("lastRead").delete().catch(()=>{});
+              userDoc.collection("history").doc("lastRead").delete().then(() => {
+                checkLastRead();
+              }).catch(()=>{});
             }
           }).catch(()=>{});
         }
+
 
         // 2. الحذف من قاعدة البيانات المحلية وتفريغ جميع صور صفحات هذا الفصل بالكامل من ذاكرة الهاتف
         if (db) {
