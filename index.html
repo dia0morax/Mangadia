@@ -1316,61 +1316,94 @@
 
 
       // ----------------- إدارة المكتبة وإكمال القراءة -----------------
+      // تنظيف الرابط وإزالة أي زيادات لضمان هوية فريدة وثابتة لكل فصل
+      function normalizeMangaUrl(rawUrl) {
+        if (!rawUrl) return "";
+        try {
+          let clean = rawUrl.trim().split('?')[0].split('#')[0];
+          clean = clean.replace(/\/+$/, '');
+          return clean.toLowerCase();
+        } catch(e) {
+          return (rawUrl || "").trim().toLowerCase();
+        }
+      }
+
       function extractTitleFromUrl(url) {
         try {
-          const parts = url.replace(/\/$/, '').split('/');
+          const clean = normalizeMangaUrl(url);
+          const parts = clean.split('/');
           const last = parts.pop() || "";
           const prev = parts.pop() || "";
           let raw = `${prev} ${last}`.replace(/[-_]/g, ' ').trim();
-          return raw.length > 5 ? raw.toUpperCase() : url;
+          return raw.length > 3 ? raw.toUpperCase() : "فصل مانجا";
         } catch (e) {
           return "فصل مانجا";
         }
       }
 
       function getSafeDocId(str) {
-        return encodeURIComponent(str).replace(/\./g, '%2E').replace(/\//g, '%2F');
+        const clean = normalizeMangaUrl(str);
+        return encodeURIComponent(clean).replace(/\./g, '%2E').replace(/\//g, '%2F');
       }
 
       function saveToLibrary(url, coverUrl, title, totalPages) {
+        const cleanUrl = normalizeMangaUrl(url);
+        if (!cleanUrl) return;
+
         const record = {
-          url,
-          coverUrl,
-          title: title || extractTitleFromUrl(url),
+          url: cleanUrl,
+          coverUrl: coverUrl || "",
+          title: title || extractTitleFromUrl(cleanUrl),
           totalPages: totalPages || 0,
           lastPage: 1,
           updatedAt: Date.now()
         };
 
-        // 1. رفع الفصل ومزامنته فوراً في سحابة حساب Google Firestore
+        // 1. حفظ موحد ونهائي في السحابة على نفس المعرّف النظيف دائماً لمنع تكرار الفصل
         if (firestoreDB && currentAuthUser) {
-          const docId = getSafeDocId(url);
-          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId).set(record, { merge: true }).then(() => {
-            renderLibrary();
-          }).catch(e => logError("Cloud Save Library", e));
+          const docId = getSafeDocId(cleanUrl);
+          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId).set(record, { merge: true })
+            .then(() => renderLibrary())
+            .catch(e => logError("Cloud Save Library", e));
         }
 
-        // 2. الحفظ في الذاكرة المحلية كمرجع سريع
+        // 2. الحفظ في قاعدة البيانات المحلية
         if (db) {
           const tx = db.transaction("library", "readwrite");
           const store = tx.objectStore("library");
           store.put(record);
-          tx.oncomplete = () => {
-            renderLibrary();
-          };
+          tx.oncomplete = () => renderLibrary();
         }
       }
 
 
+
       function updateLastReading(url, pageNum) {
+        const cleanUrl = normalizeMangaUrl(url);
+        if (!cleanUrl) return;
+
         if (firestoreDB && currentAuthUser) {
-          const docId = getSafeDocId(url);
-          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId).get().then(doc => {
-            const item = doc.exists ? doc.data() : { url, lastPage: pageNum, updatedAt: Date.now() };
-            item.lastPage = pageNum;
-            item.updatedAt = Date.now();
-            firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId).set(item, { merge: true }).catch(()=>{});
-            firestoreDB.collection("users").doc(currentAuthUser.uid).collection("history").doc("lastRead").set(item).catch(()=>{});
+          const docId = getSafeDocId(cleanUrl);
+          const libRef = firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").doc(docId);
+          
+          libRef.get().then(doc => {
+            let item;
+            if (doc.exists && doc.data()) {
+              item = doc.data();
+              item.lastPage = pageNum;
+              item.updatedAt = Date.now();
+            } else {
+              item = {
+                url: cleanUrl,
+                title: extractTitleFromUrl(cleanUrl),
+                lastPage: pageNum,
+                totalPages: currentChapterImages ? currentChapterImages.length : 0,
+                coverUrl: currentChapterImages && currentChapterImages[0] ? currentChapterImages[0] : "",
+                updatedAt: Date.now()
+              };
+            }
+            libRef.set(item, { merge: true }).catch(()=>{});
+            firestoreDB.collection("users").doc(currentAuthUser.uid).collection("history").doc("lastRead").set(item, { merge: true }).catch(()=>{});
           }).catch(()=>{});
         }
 
@@ -1379,18 +1412,28 @@
         const libStore = tx.objectStore("library");
         const histStore = tx.objectStore("history");
 
-        const getReq = libStore.get(url);
+        const getReq = libStore.get(cleanUrl);
         getReq.onsuccess = () => {
-          if (getReq.result) {
-            const item = getReq.result;
+          let item = getReq.result;
+          if (!item) {
+            item = {
+              url: cleanUrl,
+              title: extractTitleFromUrl(cleanUrl),
+              lastPage: pageNum,
+              totalPages: currentChapterImages ? currentChapterImages.length : 0,
+              coverUrl: currentChapterImages && currentChapterImages[0] ? currentChapterImages[0] : "",
+              updatedAt: Date.now()
+            };
+          } else {
             item.lastPage = pageNum;
             item.updatedAt = Date.now();
-            libStore.put(item);
-            histStore.put({ key: "lastRead", data: item });
-            checkLastRead();
           }
+          libStore.put(item);
+          histStore.put({ key: "lastRead", data: item });
+          checkLastRead();
         };
       }
+
 
 
 
@@ -1469,18 +1512,30 @@
 
       function renderLibrary() {
         getLibraryBooks((books) => {
-          const countEl = document.getElementById('libraryCount');
-          if (countEl) countEl.innerText = `${books.length} فصول`;
           if (!mangaGrid) return;
           mangaGrid.innerHTML = "";
 
-          if (!books.length) {
+          // دمج وتصفية أي نسخ مكررة من نفس الفصل والإبقاء على أحدث نسخة نشطة فقط
+          const uniqueMap = new Map();
+          (books || []).forEach(b => {
+            if (!b || !b.url) return;
+            const key = normalizeMangaUrl(b.url);
+            if (!uniqueMap.has(key) || (b.updatedAt || 0) > (uniqueMap.get(key).updatedAt || 0)) {
+              uniqueMap.set(key, b);
+            }
+          });
+
+          const uniqueBooks = Array.from(uniqueMap.values());
+          const countEl = document.getElementById('libraryCount');
+          if (countEl) countEl.innerText = `${uniqueBooks.length} فصول`;
+
+          if (!uniqueBooks.length) {
             mangaGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-book" style="font-size:2rem; margin-bottom:10px; display:block;"></i>المكتبة فارغة حالياً. الصق رابط أي فصل بالأعلى ليحفظ هنا ككتاب.</div>`;
             return;
           }
 
-          books.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-          books.forEach(b => {
+          uniqueBooks.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          uniqueBooks.forEach(b => {
             const card = document.createElement('div');
             card.className = 'book-item';
             card.innerHTML = `
@@ -1498,6 +1553,7 @@
           });
         });
       }
+
 
 
       function deleteBook(encodedUrl) {
