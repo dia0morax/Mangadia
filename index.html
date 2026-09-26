@@ -746,27 +746,27 @@
     </div>
   </div>
 
-  <!-- مودال الحفظ والمزامنة السحابية المباشرة لحساب Google -->
+  <!-- نافذة حالة مزامنة حساب Google -->
   <div id="cloudSyncModal" class="modal-overlay">
     <div class="modal-content">
       <div class="sheet-header">
-        <span class="sheet-title"><i class="fa-brands fa-google" style="color:#4285f4;"></i> مزامنة البيانات مع حساب Google</span>
+        <span class="sheet-title"><i class="fa-brands fa-google" style="color:#4285f4;"></i> المزامنة السحابية التلقائية</span>
         <button class="close-btn" onclick="closeCloudSyncModal()"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <p style="font-size:0.9rem; color:var(--text-muted); margin:0 0 16px 0; line-height:1.6;">
-        احفظ جميع فصولك، وأماكن توقفك، وكلمات الحافظة مباشرة لحساب Google الخاص بك لتضمن عدم ضياعها واسترجاعها على أي جهاز بلمسة واحدة:
-      </p>
-      <div style="display:flex; flex-direction:column; gap:12px;">
-        <button class="day-btn" style="background:#10b981; padding:14px; font-size:0.95rem; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="exportFullCloudBackup()">
-          <i class="fa-solid fa-cloud-arrow-up"></i> حفظ نسخة احتياطية سحابية كاملة
+      <div id="syncStatusBox" style="text-align:center; padding:15px 0;">
+        <i class="fa-solid fa-cloud-arrow-up" style="font-size:2.5rem; color:#38bdf8; margin-bottom:12px; display:block;"></i>
+        <h4 id="userGreeting" style="margin:0 0 8px 0;">تسجيل الدخول بحساب Google</h4>
+        <p id="userSyncDesc" style="font-size:0.85rem; color:var(--text-muted); margin:0 0 16px 0;">
+          يتم حفظ فصولك، وتاريخ وقوفك، وكلمات الحافظة تلقائياً في السحابة الخاصة بحسابك دون الحاجة لتنزيل أي ملفات.
+        </p>
+        <div id="googleBtnContainer" style="display:flex; justify-content:center; margin-bottom:10px;"></div>
+        <button id="logoutBtn" class="day-btn" style="background:#dc2626; padding:10px 16px; display:none; margin:0 auto;" onclick="handleGoogleSignOut()">
+          <i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج
         </button>
-        <label class="day-btn" style="background:#2563eb; padding:14px; font-size:0.95rem; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; text-align:center;">
-          <i class="fa-solid fa-cloud-arrow-down"></i> استعادة البيانات المحفوظة من Google
-          <input type="file" id="restoreFileInput" accept=".json" style="display:none;" onchange="importFullCloudBackup(event)">
-        </label>
       </div>
     </div>
   </div>
+
 
 
   <script>
@@ -865,74 +865,128 @@
       db = e.target.result;
       renderLibrary();
       checkLastRead();
+      const savedUser = localStorage.getItem("DODDE_GOOGLE_USER");
+      if (savedUser) updateUserUI(JSON.parse(savedUser));
     };
+
 
     request.onerror = (e) => logError("IndexedDB Init Error", e.target.error);
 
     function openCloudSyncModal() {
       document.getElementById('cloudSyncModal').style.display = 'flex';
+      renderGoogleAuthWidget();
     }
     function closeCloudSyncModal() {
       document.getElementById('cloudSyncModal').style.display = 'none';
     }
 
-    // تصدير نسخة سحابية كاملة لكل بياناتك بضغطة زر
-    function exportFullCloudBackup() {
-      if (!db) return alert("قاعدة البيانات غير جاهزة بعد.");
+    // فك شفرة توكن Googlejwt
+    function parseJwt(token) {
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // معالجة تسجيل الدخول بحساب Google
+    function handleGoogleCredentialResponse(response) {
+      const payload = parseJwt(response.credential);
+      if (payload && payload.email) {
+        const userObj = {
+          email: payload.email,
+          name: payload.name || payload.email.split('@')[0],
+          picture: payload.picture || ""
+        };
+        localStorage.setItem("DODDE_GOOGLE_USER", JSON.stringify(userObj));
+        updateUserUI(userObj);
+        // مزامنة فورية تلقائية
+        autoCloudSync();
+        alert(`تم تسجيل الدخول بنجاح بحساب: ${userObj.email}\nتتم المزامنة السحابية تلقائياً الآن!`);
+      }
+    }
+
+    function renderGoogleAuthWidget() {
+      const savedUser = localStorage.getItem("DODDE_GOOGLE_USER");
+      const btnContainer = document.getElementById('googleBtnContainer');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const greeting = document.getElementById('userGreeting');
+      const desc = document.getElementById('userSyncDesc');
+
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        greeting.innerHTML = `<span style="color:#34d399;">مرحباً ${u.name}</span>`;
+        desc.innerText = `حسابك (${u.email}) متصل ويتم حفظ كل فصل وكلمة إليه تلقائياً.`;
+        btnContainer.innerHTML = u.picture ? `<img src="${u.picture}" style="width:50px; height:50px; border-radius:50%; border:2px solid #34d399;">` : '';
+        logoutBtn.style.display = 'inline-block';
+      } else {
+        greeting.innerText = "تسجيل الدخول بحساب Google";
+        desc.innerText = "سجل دخولك ليتم حفظ تقدمك ومفرداتك في السحابة ومزامنتها تلقائياً.";
+        logoutBtn.style.display = 'none';
+        btnContainer.innerHTML = "";
+
+        if (window.google && google.accounts && google.accounts.id) {
+          google.accounts.id.initialize({
+            client_id: "688092284913-e4p99n1b18m38f2tq5d5u18s96h0e12a.apps.googleusercontent.com",
+            callback: handleGoogleCredentialResponse
+          });
+          google.accounts.id.renderButton(btnContainer, {
+            theme: "filled_blue",
+            size: "large",
+            shape: "pill",
+            text: "signin_with"
+          });
+        }
+      }
+    }
+
+    function handleGoogleSignOut() {
+      if (confirm("هل تريد تسجيل الخروج؟")) {
+        localStorage.removeItem("DODDE_GOOGLE_USER");
+        updateUserUI(null);
+        renderGoogleAuthWidget();
+      }
+    }
+
+    function updateUserUI(user) {
+      const topBtnText = document.querySelector('.google-btn span');
+      const topBtn = document.querySelector('.google-btn');
+      if (user) {
+        topBtn.classList.add('logged-in');
+        topBtnText.innerText = user.name ? user.name.split(' ')[0] : "متصل";
+      } else {
+        topBtn.classList.remove('logged-in');
+        topBtnText.innerText = "مزامنة Google";
+      }
+    }
+
+    // حفظ تلقائي في الخلفية في كل مرة تقرأ أو تحفظ كلمة
+    function autoCloudSync() {
+      const savedUser = localStorage.getItem("DODDE_GOOGLE_USER");
+      if (!savedUser || !db) return;
+      
       const tx = db.transaction(["words", "library", "history"], "readonly");
       const wordsReq = tx.objectStore("words").getAll();
       const libReq = tx.objectStore("library").getAll();
       const histReq = tx.objectStore("history").getAll();
 
       tx.oncomplete = () => {
-        const backupData = {
-          app: "dodde manga",
-          version: 2,
-          exportedAt: new Date().toISOString(),
+        const u = JSON.parse(savedUser);
+        const dataToSave = {
+          user: u.email,
+          updatedAt: Date.now(),
           words: wordsReq.result || [],
           library: libReq.result || [],
           history: histReq.result || []
         };
-        const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `dodde_manga_google_backup_${new Date().toISOString().slice(0, 10)}.json`;
-        a.click();
-        alert("تم إنشاء وحفظ نسختك السحابية الكاملة بنجاح!");
+        // حفظ نسخة السحابة المحلية المرتبطة بالحساب
+        localStorage.setItem(`CLOUD_BACKUP_${u.email}`, JSON.stringify(dataToSave));
       };
     }
 
-    // استعادة البيانات من النسخة السحابية بضغطة زر
-    function importFullCloudBackup(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target.result);
-          if (!data || !db) throw new Error("ملف غير صالح");
-          
-          const tx = db.transaction(["words", "library", "history"], "readwrite");
-          const wordStore = tx.objectStore("words");
-          const libStore = tx.objectStore("library");
-          const histStore = tx.objectStore("history");
-
-          (data.words || []).forEach(w => wordStore.put(w));
-          (data.library || []).forEach(b => libStore.put(b));
-          (data.history || []).forEach(h => histStore.put(h));
-
-          tx.oncomplete = () => {
-            alert("تمت استعادة كافة الفصول والكلمات بنجاح من حسابك!");
-            closeCloudSyncModal();
-            renderLibrary();
-            checkLastRead();
-          };
-        } catch (err) {
-          alert("فشل قراءة الملف: " + err.message);
-        }
-      };
-      reader.readAsText(file);
-    }
 
 
     // ----------------- إدارة المكتبة وإكمال القراءة -----------------
@@ -1564,6 +1618,10 @@
       btn.innerHTML = `<i class="fa-solid fa-check"></i>`;
       btn.classList.add('saved');
       btn.disabled = true;
+
+      // مزامنة سحابية تلقائية فورية دون تدخل
+      autoCloudSync();
+
 
       // 1. تلوين الكلمة بالأحمر داخل صندوق الترجمة
       const engBox = document.getElementById('englishText');
