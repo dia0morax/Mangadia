@@ -2061,22 +2061,8 @@
 
 
 
-      // جلب كافة الكلمات مع إعطاء الأولوية القصوى لسحابة Firestore المباشرة
+      // جلب كافة الكلمات بشكل فوري وآمن يمنع تعليق شاشة التحميل
       function getAllWords(callback) {
-        if (firestoreDB && currentAuthUser) {
-          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("words").get().then(snap => {
-            const list = [];
-            snap.forEach(d => list.push(d.data()));
-            callback(list);
-          }).catch(() => {
-            fallbackLocalWords(callback);
-          });
-        } else {
-          fallbackLocalWords(callback);
-        }
-      }
-
-      function fallbackLocalWords(callback) {
         if (!db) return callback([]);
         try {
           const tx = db.transaction("words", "readonly");
@@ -2091,16 +2077,14 @@
 
 
 
+
       // ----------------- الترجمة والـ OCR مع التمييز الأحمر للكلمات المحفوظة -----------------
       async function sendToTranslate(base64Image) {
         fixSheetScaleToScreen();
         bottomSheet.classList.add('open');
         sheetContent.style.display = 'none';
         loader.style.display = 'block';
-
-
-
-
+        loader.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري قراءة الحوار وترجمته بالعربية الفصيحة...`;
 
         try {
           const res = await fetch(`${BACKEND_URL}/api/ocr-translate`, {
@@ -2123,103 +2107,100 @@
           currentSentence = data.english_text || "";
           currentTranslation = data.arabic_translation || "";
 
-          // جلب كل الكلمات المحفوظة وفحص وجودها فوراً لتمييزها بالأحمر
           getAllWords((savedList) => {
-            const savedWordsMap = new Map();
-            if (Array.isArray(savedList)) {
-              savedList.forEach(item => {
-                if (item && item.word) {
-                  savedWordsMap.set(item.word.toLowerCase().trim(), item);
-                }
+            try {
+              const savedWordsMap = new Map();
+              if (Array.isArray(savedList)) {
+                savedList.forEach(item => {
+                  if (item && item.word) {
+                    savedWordsMap.set(item.word.toLowerCase().trim(), item);
+                  }
+                });
+              }
+
+              let highlightedEng = currentSentence;
+              savedWordsMap.forEach((val, key) => {
+                try {
+                  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                  const regex = new RegExp(`\\b(${escapedKey})\\b`, 'gi');
+                  highlightedEng = highlightedEng.replace(regex, `<span class="saved-highlight" style="color:#ef4444 !important; font-weight:800; text-decoration:underline;">$1</span>`);
+                } catch(e) {}
               });
+
+              document.getElementById('englishText').innerHTML = highlightedEng || "تعذر قراءة النص";
+              document.getElementById('arabicText').innerText = currentTranslation || "تعذر الترجمة";
+
+              let hasAnySavedWord = false;
+              let matchedSavedWords = [];
+
+              const wordsBox = document.getElementById('wordsContainer');
+              wordsBox.innerHTML = "";
+
+              if (data.words && data.words.length) {
+                data.words.forEach(item => {
+                  const cleanWord = (item.word || "").toLowerCase().trim();
+                  const isAlreadySaved = savedWordsMap.has(cleanWord);
+
+                  const card = document.createElement('div');
+                  card.className = 'word-card';
+
+                  if (isAlreadySaved) {
+                    hasAnySavedWord = true;
+                    matchedSavedWords.push(item.word);
+                    card.innerHTML = `
+                    <span><b class="saved-highlight" style="color:#ef4444 !important; font-weight:800;">${item.word}</b>: ${item.meaning}</span>
+                    <button class="add-btn saved" title="محفوظة مسبقاً" disabled><i class="fa-solid fa-check"></i></button>
+                  `;
+                  } else {
+                    card.innerHTML = `
+                    <span><b>${item.word}</b>: ${item.meaning}</span>
+                    <button class="add-btn" onclick="handleWordAdd(this, '${item.word.replace(/'/g, "\\'")}', '${item.meaning.replace(/'/g, "\\'")}')"><i class="fa-solid fa-plus"></i></button>
+                  `;
+                  }
+                  wordsBox.appendChild(card);
+                });
+              }
+
+              if (hasAnySavedWord && lastSelectedWrapper && lastRelativeBox) {
+                const fullText = (currentSentence || "").trim();
+                const textLen = Math.max(fullText.length, 1);
+
+                matchedSavedWords.forEach(savedWord => {
+                  const cleanWord = (savedWord || "").trim();
+                  const wordIndex = fullText.toLowerCase().indexOf(cleanWord.toLowerCase());
+                  let verticalRatio = 0.4;
+                  if (wordIndex !== -1) {
+                    verticalRatio = Math.max(0.08, Math.min(0.82, (wordIndex / textLen)));
+                  }
+
+                  const calculatedTop = lastRelativeBox.top + (lastRelativeBox.height * verticalRatio);
+
+                  const wordBox = {
+                    left: lastRelativeBox.left + (lastRelativeBox.width * 0.12),
+                    top: calculatedTop,
+                    width: Math.min(Math.max(lastRelativeBox.width * 0.76, 25), 65),
+                    height: 14,
+                    word: cleanWord,
+                    meaning: "محفوظة مسبقاً",
+                    chapterUrl: currentChapterUrl,
+                    page: parseInt(lastSelectedWrapper.dataset.page || "1", 10)
+                  };
+                  drawWordHighlightOnPage(lastSelectedWrapper, wordBox);
+                });
+              }
+            } catch (innerErr) {
+              logError("Highlight Process Error", innerErr.message);
+            } finally {
+              loader.style.display = 'none';
+              sheetContent.style.display = 'block';
             }
-
-            // تمييز الكلمات المحفوظة باللون الأحمر الصريح داخل الجملة الأصلية
-            let highlightedEng = currentSentence;
-            savedWordsMap.forEach((val, key) => {
-              try {
-                const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const regex = new RegExp(`\\b(${escapedKey})\\b`, 'gi');
-                highlightedEng = highlightedEng.replace(regex, `<span class="saved-highlight" style="color:#ef4444 !important; font-weight:800; text-decoration:underline;">$1</span>`);
-              } catch(e) {}
-            });
-
-            document.getElementById('englishText').innerHTML = highlightedEng || "تعذر قراءة النص";
-            document.getElementById('arabicText').innerText = currentTranslation || "تعذر الترجمة";
-
-            let hasAnySavedWord = false;
-            let matchedSavedWords = [];
-
-            const wordsBox = document.getElementById('wordsContainer');
-            wordsBox.innerHTML = "";
-
-            if (data.words && data.words.length) {
-              data.words.forEach(item => {
-                const cleanWord = (item.word || "").toLowerCase().trim();
-                const isAlreadySaved = savedWordsMap.has(cleanWord);
-
-                const card = document.createElement('div');
-                card.className = 'word-card';
-
-                if (isAlreadySaved) {
-                  hasAnySavedWord = true;
-                  matchedSavedWords.push(item.word);
-                  card.innerHTML = `
-                  <span><b class="saved-highlight" style="color:#ef4444 !important; font-weight:800;">${item.word}</b>: ${item.meaning}</span>
-                  <button class="add-btn saved" title="محفوظة مسبقاً" disabled><i class="fa-solid fa-check"></i></button>
-                `;
-                } else {
-                  card.innerHTML = `
-                  <span><b>${item.word}</b>: ${item.meaning}</span>
-                  <button class="add-btn" onclick="handleWordAdd(this, '${item.word.replace(/'/g, "\\'")}', '${item.meaning.replace(/'/g, "\\'")}')"><i class="fa-solid fa-plus"></i></button>
-                `;
-                }
-                wordsBox.appendChild(card);
-              });
-            }
-
-            // رسم خط نحيف ومحدد لموضع كل كلمة محفوظة مسبقاً دون تغطية كامل الفقاعة
-            if (hasAnySavedWord && lastSelectedWrapper && lastRelativeBox) {
-              const fullText = (currentSentence || "").trim();
-              const textLen = Math.max(fullText.length, 1);
-
-              matchedSavedWords.forEach(savedWord => {
-                const cleanWord = (savedWord || "").trim();
-                const wordIndex = fullText.toLowerCase().indexOf(cleanWord.toLowerCase());
-                let verticalRatio = 0.4;
-                if (wordIndex !== -1) {
-                  verticalRatio = Math.max(0.08, Math.min(0.82, (wordIndex / textLen)));
-                }
-
-                const calculatedTop = lastRelativeBox.top + (lastRelativeBox.height * verticalRatio);
-
-                const wordBox = {
-                  left: lastRelativeBox.left + (lastRelativeBox.width * 0.12),
-                  top: calculatedTop,
-                  width: Math.min(Math.max(lastRelativeBox.width * 0.76, 25), 65),
-                  height: 14,
-                  word: cleanWord,
-                  meaning: "محفوظة مسبقاً",
-                  chapterUrl: currentChapterUrl,
-                  page: parseInt(lastSelectedWrapper.dataset.page || "1", 10)
-                };
-                drawWordHighlightOnPage(lastSelectedWrapper, wordBox);
-              });
-            }
-
-
-
-
-
-            loader.style.display = 'none';
-            sheetContent.style.display = 'block';
           });
-
 
         } catch (err) {
           loader.innerHTML = `<span style="color:#ef4444;">خطأ: ${err.message}</span>`;
         }
       }
+
 
       function handleWordAdd(btn, word, meaning) {
         const todayStr = new Date().toISOString().slice(0, 10);
