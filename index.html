@@ -1161,34 +1161,47 @@
       if (!firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
       }
-      
-      // ضمان بقاء تسجيل الدخول محفوظاً دائماً في المتصفح
+
       firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
 
       const firestoreDB = firebase.firestore();
       let currentAuthUser = null;
-
-      // مراقبة جلسة تسجيل الدخول بحساب Google والربط اللحظي مع السحابة
       let cloudUnsubscribers = [];
 
+      // مراقبة جلسة تسجيل الدخول بحساب Google والربط اللحظي مع السحابة
       firebase.auth().onAuthStateChanged((user) => {
         currentAuthUser = user;
         updateAuthUI(user);
         const lockScreen = document.getElementById('authLockScreen');
 
-        cloudUnsubscribers.forEach(unsub => unsub());
+        cloudUnsubscribers.forEach(unsub => { try { unsub(); } catch(e){} });
         cloudUnsubscribers = [];
 
         if (user) {
-          if (lockScreen) lockScreen.style.setProperty('display', 'none', 'important');
+          if (lockScreen) {
+            lockScreen.style.setProperty('display', 'none', 'important');
+          }
           bindRealtimeCloudSync(user.uid);
         } else {
-          if (lockScreen) lockScreen.style.setProperty('display', 'flex', 'important');
+          if (lockScreen) {
+            lockScreen.style.setProperty('display', 'flex', 'important');
+          }
           if (mangaGrid) mangaGrid.innerHTML = "";
           if (continueCard) continueCard.style.display = 'none';
         }
       });
 
+      // التقاط نتيجة التحويل في حال استخدم المتصفح Redirect
+      firebase.auth().getRedirectResult().then((result) => {
+        if (result && result.user) {
+          currentAuthUser = result.user;
+          updateAuthUI(result.user);
+          const lockScreen = document.getElementById('authLockScreen');
+          if (lockScreen) lockScreen.style.setProperty('display', 'none', 'important');
+        }
+      }).catch((err) => {
+        logError("Google Redirect Result", err.message);
+      });
 
       function handleGoogleSignIn() {
         if (currentAuthUser) {
@@ -1197,7 +1210,7 @@
               currentAuthUser = null;
               updateAuthUI(null);
               renderLibrary();
-              checkLastRead();
+              if (typeof checkLastRead === 'function') checkLastRead();
             });
           }
           return;
@@ -1215,11 +1228,12 @@
       function updateAuthUI(user) {
         const btn = document.getElementById('googleAuthBtn');
         const text = document.getElementById('googleBtnText');
+        if (!btn || !text) return;
         if (user) {
           btn.classList.add('logged-in');
           text.innerHTML = user.photoURL
             ? `<img src="${user.photoURL}" class="google-avatar"> ${user.displayName ? user.displayName.split(' ')[0] : 'حسابي'}`
-          : `<i class="fa-solid fa-user-check"></i> حسابي`;
+            : `<i class="fa-solid fa-user-check"></i> حسابي`;
         } else {
           btn.classList.remove('logged-in');
           text.innerText = "دخول بحساب Google";
@@ -1240,10 +1254,10 @@
             store.clear();
             cloudWords.forEach(w => store.put(w));
             tx.oncomplete = () => {
-              renderVocabByDays();
+              if (typeof renderVocabByDays === 'function') renderVocabByDays();
             };
           } else {
-            renderVocabByDays();
+            if (typeof renderVocabByDays === 'function') renderVocabByDays();
           }
         }, (err) => logError("Realtime Words Sync", err.message));
         cloudUnsubscribers.push(unsubWords);
@@ -1252,7 +1266,7 @@
           const cloudHls = [];
           snap.forEach(doc => cloudHls.push(doc.data()));
           localStorage.setItem("DODDE_HIGHLIGHTS", JSON.stringify(cloudHls));
-          if (currentChapterUrl) {
+          if (currentChapterUrl && typeof applySavedMangaHighlights === 'function') {
             applySavedMangaHighlights(currentChapterUrl);
           }
         }, (err) => logError("Realtime Highlights Sync", err.message));
@@ -1267,7 +1281,7 @@
             store.clear();
             cloudBooks.forEach(b => store.put(b));
             tx.oncomplete = () => {
-              renderLibrary();
+              if (typeof renderLibrary === 'function') renderLibrary();
             };
           }
         }, (err) => logError("Realtime Library Sync", err.message));
@@ -1277,11 +1291,14 @@
           if (doc.exists && db) {
             const histTx = db.transaction("history", "readwrite");
             histTx.objectStore("history").put({ key: "lastRead", data: doc.data() });
-            histTx.oncomplete = () => checkLastRead();
+            histTx.oncomplete = () => {
+              if (typeof checkLastRead === 'function') checkLastRead();
+            };
           }
         }, (err) => logError("Realtime History Sync", err.message));
         cloudUnsubscribers.push(unsubHistory);
       }
+
 
 
 
@@ -2038,67 +2055,8 @@
 
 
 
-      // ----------------- نظام التحقق وربط حساب Google السحابي -----------------
-      let currentUser = null;
+      // تم التوحيد بالكامل مع نظام الدخول والمزامنة الرئيسي بنجاح
 
-      function handleGoogleAuth() {
-        if (!firebase.apps.length) {
-          const savedConfig = localStorage.getItem("FIREBASE_USER_CONFIG");
-          if (!savedConfig) {
-            alert("تنبيه: يلزم إدخال كائن Firebase Config الخاص بك مرة واحدة فقط لتفعيل الحفظ بحساب Google.");
-            openFirebaseConfigModal();
-            return;
-          }
-          initFirebaseIfAvailable();
-        }
-
-        if (currentUser) {
-          if (confirm(`أنت مسجل بحساب: ${currentUser.email}\nهل تريد تسجيل الخروج؟`)) {
-            firebase.auth().signOut().then(() => {
-              currentUser = null;
-              updateGoogleUserUI();
-            });
-          }
-          return;
-        }
-
-        const provider = new firebase.auth.GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
-
-        firebase.auth().signInWithPopup(provider).catch(err => {
-          logError("Google Sign-In Popup Error", err.message);
-          // إذا حظر المتصفح النافذة المنبثقة يتم التحويل المباشر
-          firebase.auth().signInWithRedirect(provider);
-        });
-      }
-
-
-      function setupAuthListener() {
-        if (!firebase.apps.length) return;
-        firebase.auth().onAuthStateChanged(user => {
-          currentUser = user;
-          updateGoogleUserUI();
-          if (user) {
-            syncUserDataFromCloud(user.uid);
-          }
-        });
-      }
-
-      function updateGoogleUserUI() {
-        const btn = document.getElementById('googleAuthBtn');
-        const text = document.getElementById('googleBtnText');
-        if (currentUser) {
-          btn.classList.add('logged-in');
-          text.innerHTML = currentUser.photoURL
-            ? `<img src="${currentUser.photoURL}" class="google-avatar"> ${currentUser.displayName ? currentUser.displayName.split(' ')[0] : 'متصل'}`
-          : `<i class="fa-solid fa-user-check"></i> متصل`;
-        } else {
-          btn.classList.remove('logged-in');
-          text.innerText = "ربط الحساب";
-        }
-      }
-
-      // تم التوحيد مع الدالة الرئيسية بنجاح
 
 
       // جلب كافة الكلمات مع إعطاء الأولوية القصوى لسحابة Firestore المباشرة
