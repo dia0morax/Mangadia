@@ -30,7 +30,14 @@
     .fab-crop.active { background: #ef4444; }
     .fab-vocab { background: #059669; color: #fff; }
 
-    /* بطاقة الترجمة السفلية المنبثقة */
+    /* دائرة قارئ الأخطاء العائمة أسفل اليسار */
+    #errorBadge { position: fixed; bottom: 20px; left: 20px; z-index: 90; width: 48px; height: 48px; border-radius: 24px; background: #1e293b; border: 2px solid #475569; color: #94a3b8; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: all 0.2s ease; }
+    #errorBadge.has-errors { background: #7f1d1d; border-color: #ef4444; color: #fee2e2; animation: pulse 2s infinite; }
+    #errorCount { position: absolute; top: -4px; right: -4px; background: #ef4444; color: #fff; font-size: 0.7rem; font-weight: bold; padding: 2px 6px; border-radius: 10px; display: none; }
+    #errorBadge.has-errors #errorCount { display: block; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+    /* بطاقة الترجمة السفلية */
     #bottomSheet { position: fixed; bottom: -100%; left: 0; right: 0; max-height: 75vh; background: #0f172a; border-top: 2px solid #38bdf8; border-radius: 16px 16px 0 0; z-index: 110; padding: 16px 20px; box-shadow: 0 -8px 24px rgba(0,0,0,0.6); transition: bottom 0.3s ease-out; overflow-y: auto; }
     #bottomSheet.open { bottom: 0; }
     .sheet-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 8px; margin-bottom: 12px; }
@@ -40,19 +47,25 @@
     .eng-box { font-size: 1.1rem; font-weight: 600; color: #38bdf8; margin-bottom: 12px; direction: ltr; text-align: left; }
     .ar-box { font-size: 1.15rem; color: #4ade80; margin-bottom: 16px; line-height: 1.6; font-weight: 500; }
 
-    /* قائمة الكلمات القابلة للحفظ */
     .words-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .word-card { background: #1e293b; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
     .word-card b { color: #facc15; direction: ltr; }
     .add-btn { background: #3b82f6; border: none; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
     .add-btn.saved { background: #10b981; }
 
-    /* مودال الحافظة وتصدير أنكي */
-    #vocabModal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 120; display: none; align-items: center; justify-content: center; padding: 15px; }
-    .modal-content { background: #0f172a; border: 1px solid #334155; border-radius: 12px; width: 100%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; padding: 16px; }
+    /* نوافذ منبثقة (الأخطاء والحافظة) */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 130; display: none; align-items: center; justify-content: center; padding: 15px; }
+    .modal-content { background: #0f172a; border: 1px solid #334155; border-radius: 12px; width: 100%; max-width: 520px; max-height: 82vh; display: flex; flex-direction: column; padding: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.7); }
     .modal-list { overflow-y: auto; flex: 1; margin: 12px 0; }
+
+    /* سجل تفاصيل الأخطاء */
+    .error-entry { background: #182234; border: 1px solid #ef4444; border-radius: 8px; padding: 10px; margin-bottom: 10px; font-family: monospace; font-size: 0.8rem; }
+    .error-time { color: #94a3b8; font-size: 0.7rem; margin-bottom: 4px; }
+    .error-msg { color: #f87171; font-weight: bold; word-break: break-all; direction: ltr; text-align: left; }
+    .error-details { color: #cbd5e1; margin-top: 6px; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; background: #0b0f19; padding: 6px; border-radius: 4px; direction: ltr; text-align: left; }
+
     .vocab-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #1e293b; }
-    .vocab-item span b { color: #f87171; } /* الكلمات المحفوظة باللون الأحمر المميز */
+    .vocab-item span b { color: #f87171; }
     .delete-btn { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; }
 
     .loader { display: none; text-align: center; padding: 25px; font-size: 0.95rem; color: #38bdf8; }
@@ -67,9 +80,16 @@
 
   <div id="reader"></div>
 
+  <!-- الأزرار العائمة باليمين -->
   <div class="fab-group">
     <button class="fab fab-vocab" onclick="openVocabModal()" title="الحافظة وتصدير أنكي">📚</button>
     <button class="fab fab-crop" id="cropToggleBtn" onclick="toggleCropMode()" title="تحديد فقاعة للترجمة">✂️</button>
+  </div>
+
+  <!-- قارئ الأخطاء العائم باليسار -->
+  <div id="errorBadge" onclick="openErrorModal()" title="سجل الأخطاء والتشخيص">
+    🐞
+    <span id="errorCount">0</span>
   </div>
 
   <canvas id="selectionCanvas"></canvas>
@@ -93,8 +113,23 @@
     </div>
   </div>
 
+  <!-- نافذة عرض الأخطاء والتشخيص -->
+  <div id="errorModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="sheet-header">
+        <span style="font-weight:bold; color:#f87171;">سجل الأخطاء والتشخيص (Debug Logs)</span>
+        <button class="close-btn" onclick="closeErrorModal()">✕</button>
+      </div>
+      <div id="errorLogList" class="modal-list"></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="copyErrorLogs()">نسخ السجل بالكامل</button>
+        <button class="btn btn-secondary" onclick="clearErrorLogs()">مسح السجل</button>
+      </div>
+    </div>
+  </div>
+
   <!-- نافذة الحافظة وتصدير أنكي -->
-  <div id="vocabModal">
+  <div id="vocabModal" class="modal-overlay">
     <div class="modal-content">
       <div class="sheet-header">
         <span style="font-weight:bold; color:#f8fafc;">حافظة الكلمات المحفوظة</span>
@@ -109,7 +144,6 @@
   </div>
 
   <script>
-    // رابط سيرفر Hugging Face الخاص بك
     const BACKEND_URL = "https://diajb-manga.hf.space";
 
     const reader = document.getElementById('reader');
@@ -123,12 +157,87 @@
     const loader = document.getElementById('loader');
     const vocabModal = document.getElementById('vocabModal');
     const vocabList = document.getElementById('vocabList');
+    const errorModal = document.getElementById('errorModal');
+    const errorLogList = document.getElementById('errorLogList');
+    const errorBadge = document.getElementById('errorBadge');
+    const errorCount = document.getElementById('errorCount');
 
     let isCropMode = false;
     let startX = 0, startY = 0, endX = 0, endY = 0;
     let isDrawing = false;
     let currentSentence = "";
     let currentTranslation = "";
+
+    // ----------------- نظام تتبع وتسجيل الأخطاء التلقائي -----------------
+    let errorLogs = [];
+
+    function logError(title, details = "") {
+      const timeStr = new Date().toLocaleTimeString();
+      const entry = { time: timeStr, title: String(title), details: typeof details === 'object' ? JSON.stringify(details, null, 2) : String(details) };
+      errorLogs.unshift(entry);
+      updateErrorUI();
+    }
+
+    function updateErrorUI() {
+      if (errorLogs.length > 0) {
+        errorBadge.classList.add('has-errors');
+        errorCount.innerText = errorLogs.length;
+      } else {
+        errorBadge.classList.remove('has-errors');
+        errorCount.innerText = "0";
+      }
+    }
+
+    function openErrorModal() {
+      renderErrorLogs();
+      errorModal.style.display = 'flex';
+    }
+
+    function closeErrorModal() {
+      errorModal.style.display = 'none';
+    }
+
+    function renderErrorLogs() {
+      if (!errorLogs.length) {
+        errorLogList.innerHTML = "<p style='color:#94a3b8; text-align:center;'>لا توجد أي أخطاء مسجلة، كل العمليات سليمة.</p>";
+        return;
+      }
+      errorLogList.innerHTML = "";
+      errorLogs.forEach((err) => {
+        const item = document.createElement('div');
+        item.className = 'error-entry';
+        item.innerHTML = `
+          <div class="error-time">[${err.time}]</div>
+          <div class="error-msg">${err.title}</div>
+          ${err.details ? `<div class="error-details">${err.details}</div>` : ''}
+        `;
+        errorLogList.appendChild(item);
+      });
+    }
+
+    function clearErrorLogs() {
+      errorLogs = [];
+      updateErrorUI();
+      renderErrorLogs();
+    }
+
+    function copyErrorLogs() {
+      if (!errorLogs.length) return alert("لا توجد أخطاء لنسخها.");
+      const text = errorLogs.map(e => `[${e.time}] ${e.title}\nDetails: ${e.details}`).join("\n\n---\n\n");
+      navigator.clipboard.writeText(text).then(() => {
+        alert("تم نسخ السجل بالكامل إلى الحافظة!");
+      }).catch(() => {
+        alert("فشل النسخ التلقائي، يمكنك نسخه يدوياً من الشاشة.");
+      });
+    }
+
+    // التقاط أي أخطاء مفاجئة في الجافاسكربت تلقائياً
+    window.addEventListener('error', (event) => {
+      logError(`JS Runtime Error: ${event.message}`, `${event.filename}:${event.lineno}`);
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      logError("Unhandled Promise Rejection", event.reason);
+    });
 
     // ----------------- تخزين محلي (IndexedDB) -----------------
     let db;
@@ -140,6 +249,7 @@
       }
     };
     request.onsuccess = (e) => { db = e.target.result; };
+    request.onerror = (e) => { logError("IndexedDB Error", e.target.error); };
 
     function saveWord(word, meaning, sentence) {
       if (!db) return;
@@ -154,6 +264,7 @@
       const store = tx.objectStore("words");
       const req = store.getAll();
       req.onsuccess = () => callback(req.result);
+      req.onerror = () => callback([]);
     }
 
     function deleteWordFromDB(word, callback) {
@@ -164,21 +275,37 @@
       tx.oncomplete = () => callback();
     }
 
-    // ----------------- جلب الفصل وعرضه -----------------
+    // ----------------- جلب صفحات الفصل مع التشخيص التفصيلي -----------------
     async function loadManga() {
       const url = urlInput.value.trim();
-      if (!url) return alert("يرجى إدخال رابط الفصل.");
+      if (!url) return alert("يرجى إدخال رابط الفصل أولاً.");
       
       loadBtn.disabled = true;
       loadBtn.innerText = "جاري التحميل...";
       reader.innerHTML = "<p style='margin-top:40px; color:#94a3b8;'>جاري جلب صفحات الفصل من المصدر...</p>";
 
       try {
-        const res = await fetch(`${BACKEND_URL}/api/chapter?url=${encodeURIComponent(url)}`);
-        const data = await res.json();
+        const fetchUrl = `${BACKEND_URL}/api/chapter?url=${encodeURIComponent(url)}`;
+        const res = await fetch(fetchUrl);
+        const resText = await res.text();
         
-        if (!data.success || !data.images.length) {
-          throw new Error("تعذر استخراج الصور من هذا الرابط.");
+        let data;
+        try {
+          data = JSON.parse(resText);
+        } catch (jsonErr) {
+          logError(`فشل في قراءة رد السيرفر كـ JSON (HTTP ${res.status})`, resText);
+          throw new Error(`استجابة غير صالحة من السيرفر (كود ${res.status})`);
+        }
+
+        if (!res.ok || !data.success) {
+          const errMsg = data.detail || data.error || "السيرفر لم يستطع قراءة صور هذا الرابط.";
+          logError(`خطأ من الـ API (كود ${res.status})`, { urlRequested: url, serverResponse: data });
+          throw new Error(errMsg);
+        }
+
+        if (!data.images || !data.images.length) {
+          logError("تم فتح الصفحة لكن لم يتم العثور على وسوم صور صالحة", { urlRequested: url, response: data });
+          throw new Error("لم يتم العثور على صور مانجا صالحة داخل هذا الرابط.");
         }
 
         reader.innerHTML = "";
@@ -191,13 +318,17 @@
           img.src = `${BACKEND_URL}/api/proxy?img=${encodeURIComponent(imgUrl)}`;
           img.crossOrigin = "anonymous";
           img.loading = "lazy";
+
+          img.onerror = () => {
+            logError("فشل تحميل صورة عبر البروكسي", { originalImg: imgUrl, proxySrc: img.src });
+          };
           
           wrapper.appendChild(img);
           reader.appendChild(wrapper);
         });
 
       } catch (err) {
-        reader.innerHTML = `<p style='margin-top:40px; color:#f87171;'>حدث خطأ: ${err.message}</p>`;
+        reader.innerHTML = `<p style='margin-top:40px; color:#f87171;'>حدث خطأ: ${err.message}<br><span style='font-size:0.85rem; color:#94a3b8;'>اضغط على أيقونة 🐞 بالأسفل لمعرفة التفاصيل.</span></p>`;
       } finally {
         loadBtn.disabled = false;
         loadBtn.innerText = "قراءة";
@@ -293,6 +424,7 @@
         const base64Data = tempCanvas.toDataURL('image/jpeg', 0.9);
         sendToTranslate(base64Data);
       } catch (err) {
+        logError("تعذر التقاط الصورة من الشاشة", err);
         alert("فشل التقاط الصورة: " + err.message);
       }
     }
@@ -309,7 +441,20 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image_base64: base64Image })
         });
-        const data = await res.json();
+        const resText = await res.text();
+        
+        let data;
+        try {
+          data = JSON.parse(resText);
+        } catch (jsonErr) {
+          logError(`رد غير صالح من OCR API (HTTP ${res.status})`, resText);
+          throw new Error("فشل قراءة رد خدمة الترجمة.");
+        }
+
+        if (data.error) {
+          logError("خطأ في محرك الترجمة والـ OCR", data);
+          throw new Error(data.error);
+        }
 
         currentSentence = data.english_text || "";
         currentTranslation = data.arabic_translation || "";
@@ -391,14 +536,12 @@
       }
     }
 
-    // تصدير ملف متوافق مع Anki بضغطة زر
     function exportAnkiTSV() {
       getAllWords((words) => {
         if (!words.length) return alert("لا توجد كلمات لتصديرها.");
         
         let tsvContent = "";
         words.forEach(w => {
-          // صيغة أنكي القياسية: الكلمة [Tab] المعنى [Tab] جملة السياق
           tsvContent += `${w.word}\t${w.meaning}\t${w.sentence}\n`;
         });
 
