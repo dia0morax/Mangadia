@@ -1127,7 +1127,7 @@
 
       let db;
 
-      const request = indexedDB.open("MangaSuperDB", 2);
+      const request = indexedDB.open("MangaSuperDB", 3);
       request.onupgradeneeded = (e) => {
         db = e.target.result;
         if (!db.objectStoreNames.contains("words")) {
@@ -1140,12 +1140,16 @@
         if (!db.objectStoreNames.contains("history")) {
           db.createObjectStore("history", { keyPath: "key" });
         }
+        if (!db.objectStoreNames.contains("chapter_pages")) {
+          db.createObjectStore("chapter_pages", { keyPath: "key" });
+        }
       };
       request.onsuccess = (e) => {
         db = e.target.result;
         renderLibrary();
         checkLastRead();
       };
+
 
       request.onerror = (e) => logError("IndexedDB Init Error", e.target.error);
 
@@ -1435,9 +1439,9 @@
 
       function deleteBook(encodedUrl) {
         const url = decodeURIComponent(encodedUrl);
-        if (!confirm("هل تريد حذف هذا الفصل من مكتبتك نهائياً من حسابك؟")) return;
+        if (!confirm("هل تريد حذف هذا الفصل وجميع صوره نهائياً من حسابك وجهازك؟")) return;
 
-        // 1. الحذف الجذري من سحابة Google Firestore
+        // 1. الحذف الجذري والنهائي من سحابة Google Firestore لحماية باقتك المجانية
         if (firestoreDB && currentAuthUser) {
           const userDoc = firestoreDB.collection("users").doc(currentAuthUser.uid);
           const docId = btoa(unescape(encodeURIComponent(url))).replace(/\//g, '_');
@@ -1451,10 +1455,11 @@
           }).catch(()=>{});
         }
 
-        // 2. الحذف من قاعدة البيانات المحلية
+        // 2. الحذف من قاعدة البيانات المحلية وتفريغ جميع صور صفحات هذا الفصل بالكامل من ذاكرة الهاتف
         if (db) {
-          const tx = db.transaction(["library", "history"], "readwrite");
+          const tx = db.transaction(["library", "history", "chapter_pages"], "readwrite");
           tx.objectStore("library").delete(url);
+          
           const hist = tx.objectStore("history");
           const req = hist.get("lastRead");
           req.onsuccess = () => {
@@ -1462,12 +1467,22 @@
               hist.delete("lastRead");
             }
           };
+
+          // حذف ملفات الصور المخزنة محلياً لهذا الفصل
+          const pagesStore = tx.objectStore("chapter_pages");
+          const pagesReq = pagesStore.getAll();
+          pagesReq.onsuccess = () => {
+            const allPages = pagesReq.result || [];
+            allPages.filter(p => p.url === url).forEach(p => pagesStore.delete(p.key));
+          };
+
           tx.oncomplete = () => {
             renderLibrary();
             checkLastRead();
           };
         }
       }
+
 
 
       // ----------------- التنقل ونظام ملء الشاشة الكامل -----------------
@@ -1597,7 +1612,29 @@
         loadMangaByUrl(url, 1);
       }
 
-      // ----------------- قارئ الصفحات وتتبع التقدم التلقائي -----------------
+      // ----------------- قارئ الصفحات وتتبع التقدم التلقائي والتخزين المحلي للصور -----------------
+      async function getCachedPageBlob(url, pageIdx) {
+        if (!db) return null;
+        return new Promise((resolve) => {
+          try {
+            const tx = db.transaction("chapter_pages", "readonly");
+            const store = tx.objectStore("chapter_pages");
+            const req = store.get(`${url}_p${pageIdx}`);
+            req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+            req.onerror = () => resolve(null);
+          } catch(e) { resolve(null); }
+        });
+      }
+
+      function cachePageBlob(url, pageIdx, blob) {
+        if (!db) return;
+        try {
+          const tx = db.transaction("chapter_pages", "readwrite");
+          const store = tx.objectStore("chapter_pages");
+          store.put({ key: `${url}_p${pageIdx}`, url, page: pageIdx, blob });
+        } catch(e) {}
+      }
+
       async function loadMangaByUrl(url, targetPage = 1) {
         currentChapterUrl = url;
         currentChapterTitle = extractTitleFromUrl(url);
@@ -1605,7 +1642,7 @@
         loadBtn.disabled = true;
         loadBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري الفتح...`;
         showReaderView();
-        reader.innerHTML = `<p style='margin-top:60px; color:#94a3b8; text-align:center;'><i class="fa-solid fa-compass fa-spin" style="font-size:1.8rem; margin-bottom:12px; display:block;"></i>جاري جلب صفحات الفصل وتجهيز القارئ...</p>`;
+        reader.innerHTML = `<p style='margin-top:60px; color:#94a3b8; text-align:center;'><i class="fa-solid fa-compass fa-spin" style="font-size:1.8rem; margin-bottom:12px; display:block;"></i>جاري فحص الذاكرة وجلب صفحات الفصل...</p>`;
 
         try {
           const res = await fetch(`${BACKEND_URL}/api/chapter?url=${encodeURIComponent(url)}`);
@@ -1618,47 +1655,53 @@
           currentChapterImages = data.images;
           reader.innerHTML = "";
 
-          // حفظ الفصل بالمكتبة بغلاف أول صفحة
           saveToLibrary(url, data.images[0], currentChapterTitle, data.images.length);
 
-          // جاهزية عرض الصفحات الطبيعي
+          for (let idx = 0; idx < data.images.length; idx++) {
+            const imgUrl = data.images[idx];
+            const pageNum = idx + 1;
 
-
-
-          data.images.forEach((imgUrl, idx) => {
             const wrapper = document.createElement('div');
             wrapper.className = 'page-wrapper';
-            wrapper.dataset.page = idx + 1;
+            wrapper.dataset.page = pageNum;
 
             const img = document.createElement('img');
             img.className = 'manga-page';
-            img.src = `${BACKEND_URL}/api/proxy?img=${encodeURIComponent(imgUrl)}`;
             img.crossOrigin = "anonymous";
             img.loading = idx < 3 ? "eager" : "lazy";
 
-            // طبقة الهايلايت الشفافة فوق المانجا
+            // فحص وجود الصورة مخزنة مسبقاً في ذاكرة الجهاز
+            getCachedPageBlob(url, pageNum).then(cachedBlob => {
+              if (cachedBlob) {
+                img.src = URL.createObjectURL(cachedBlob);
+              } else {
+                const proxySrc = `${BACKEND_URL}/api/proxy?img=${encodeURIComponent(imgUrl)}`;
+                img.src = proxySrc;
+                // تحميل وحفظ نسخة في ذاكرة الجهاز تلقائياً للمرات القادمة
+                fetch(proxySrc)
+                  .then(r => r.blob())
+                  .then(blob => cachePageBlob(url, pageNum, blob))
+                  .catch(() => {});
+              }
+            });
+
             const hlLayer = document.createElement('div');
             hlLayer.className = 'manga-highlight-layer';
-            hlLayer.id = `hl_layer_${idx + 1}`;
+            hlLayer.id = `hl_layer_${pageNum}`;
 
             const indicator = document.createElement('div');
             indicator.className = 'page-indicator';
-            indicator.innerText = `${idx + 1} / ${data.images.length}`;
+            indicator.innerText = `${pageNum} / ${data.images.length}`;
 
             wrapper.appendChild(img);
             wrapper.appendChild(hlLayer);
             wrapper.appendChild(indicator);
             reader.appendChild(wrapper);
-          });
+          }
 
-          // استرجاع ورسم كافة الهايلايتات المحفوظة الخاصة بهذه الصفحة عبر كل المانغات
           applySavedMangaHighlights(url);
-
-          // مراقبة الصفحة النشطة وتحديث تقدم القراءة تلقائياً أثناء التمرير
           setupPageTracker();
 
-
-          // التمرير مباشرة للصفحة المستهدفة
           if (targetPage > 1) {
             setTimeout(() => {
               const targetEl = document.querySelector(`.page-wrapper[data-page='${targetPage}']`);
@@ -1674,6 +1717,7 @@
           loadBtn.innerHTML = `<i class="fa-solid fa-plus"></i> قراءة وحفظ`;
         }
       }
+
 
       let trackerObserver = null;
       function setupPageTracker() {
