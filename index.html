@@ -1,7 +1,414 @@
-spaces
-fastapi>=0.100.0
-uvicorn>=0.23.0
-curl_cffi>=0.7.0
-beautifulsoup4>=4.12.0
-httpx>=0.25.0
-gradio>=4.0.0
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Manga Eloquent Reader & Anki</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; padding: 0; background: #0b0f19; color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; overflow-x: hidden; }
+
+    /* الشريط العلوي */
+    header { position: sticky; top: 0; z-index: 50; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px); padding: 10px 14px; border-bottom: 1px solid #1e293b; display: flex; gap: 8px; align-items: center; }
+    #urlInput { flex: 1; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.9rem; outline: none; }
+    .btn { padding: 10px 14px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap; font-size: 0.9rem; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-secondary { background: #334155; color: #e2e8f0; }
+
+    /* منطقة القراءة */
+    #reader { width: 100%; max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; min-height: 80vh; }
+    .page-wrapper { width: 100%; position: relative; margin-bottom: 4px; }
+    .manga-page { width: 100%; height: auto; display: block; background: #1e293b; min-height: 300px; }
+
+    /* كانفاس التحديد باللمس */
+    #selectionCanvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100; display: none; cursor: crosshair; touch-action: none; }
+
+    /* الأزرار العائمة */
+    .fab-group { position: fixed; bottom: 20px; right: 20px; z-index: 90; display: flex; flex-direction: column; gap: 12px; }
+    .fab { width: 56px; height: 56px; border-radius: 28px; border: none; box-shadow: 0 4px 14px rgba(0,0,0,0.5); font-size: 1.4rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .fab-crop { background: #2563eb; color: #fff; }
+    .fab-crop.active { background: #ef4444; }
+    .fab-vocab { background: #059669; color: #fff; }
+
+    /* بطاقة الترجمة السفلية المنبثقة */
+    #bottomSheet { position: fixed; bottom: -100%; left: 0; right: 0; max-height: 75vh; background: #0f172a; border-top: 2px solid #38bdf8; border-radius: 16px 16px 0 0; z-index: 110; padding: 16px 20px; box-shadow: 0 -8px 24px rgba(0,0,0,0.6); transition: bottom 0.3s ease-out; overflow-y: auto; }
+    #bottomSheet.open { bottom: 0; }
+    .sheet-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 8px; margin-bottom: 12px; }
+    .close-btn { background: none; border: none; color: #94a3b8; font-size: 1.4rem; cursor: pointer; }
+
+    .section-title { font-size: 0.8rem; color: #94a3b8; margin: 6px 0; text-transform: uppercase; }
+    .eng-box { font-size: 1.1rem; font-weight: 600; color: #38bdf8; margin-bottom: 12px; direction: ltr; text-align: left; }
+    .ar-box { font-size: 1.15rem; color: #4ade80; margin-bottom: 16px; line-height: 1.6; font-weight: 500; }
+
+    /* قائمة الكلمات القابلة للحفظ */
+    .words-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .word-card { background: #1e293b; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
+    .word-card b { color: #facc15; direction: ltr; }
+    .add-btn { background: #3b82f6; border: none; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+    .add-btn.saved { background: #10b981; }
+
+    /* مودال الحافظة وتصدير أنكي */
+    #vocabModal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 120; display: none; align-items: center; justify-content: center; padding: 15px; }
+    .modal-content { background: #0f172a; border: 1px solid #334155; border-radius: 12px; width: 100%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; padding: 16px; }
+    .modal-list { overflow-y: auto; flex: 1; margin: 12px 0; }
+    .vocab-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #1e293b; }
+    .vocab-item span b { color: #f87171; } /* الكلمات المحفوظة باللون الأحمر المميز */
+    .delete-btn { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; }
+
+    .loader { display: none; text-align: center; padding: 25px; font-size: 0.95rem; color: #38bdf8; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <input type="text" id="urlInput" placeholder="ضع رابط الفصل هنا...">
+    <button class="btn btn-primary" id="loadBtn" onclick="loadManga()">قراءة</button>
+  </header>
+
+  <div id="reader"></div>
+
+  <div class="fab-group">
+    <button class="fab fab-vocab" onclick="openVocabModal()" title="الحافظة وتصدير أنكي">📚</button>
+    <button class="fab fab-crop" id="cropToggleBtn" onclick="toggleCropMode()" title="تحديد فقاعة للترجمة">✂️</button>
+  </div>
+
+  <canvas id="selectionCanvas"></canvas>
+
+  <!-- نافذة الترجمة السفلية -->
+  <div id="bottomSheet">
+    <div class="sheet-header">
+      <span style="font-weight:bold; color:#f8fafc;">ترجمة الحوار الفصيحة</span>
+      <button class="close-btn" onclick="closeSheet()">✕</button>
+    </div>
+    <div id="loader" class="loader">جاري قراءة الحوار وترجمته بالعربية الفصيحة...</div>
+    <div id="sheetContent" style="display:none;">
+      <div class="section-title">النص الإنجليزي</div>
+      <div id="englishText" class="eng-box"></div>
+      
+      <div class="section-title">الترجمة الفصيحة السياقية</div>
+      <div id="arabicText" class="ar-box"></div>
+      
+      <div class="section-title">المفردات (اضغط + لحفظها في أنكي)</div>
+      <div id="wordsContainer" class="words-container"></div>
+    </div>
+  </div>
+
+  <!-- نافذة الحافظة وتصدير أنكي -->
+  <div id="vocabModal">
+    <div class="modal-content">
+      <div class="sheet-header">
+        <span style="font-weight:bold; color:#f8fafc;">حافظة الكلمات المحفوظة</span>
+        <button class="close-btn" onclick="closeVocabModal()">✕</button>
+      </div>
+      <div id="vocabList" class="modal-list"></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="exportAnkiTSV()">تصدير لـ Anki (.tsv)</button>
+        <button class="btn btn-secondary" onclick="clearAllVocab()">تفريغ</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // رابط سيرفر Hugging Face الخاص بك
+    const BACKEND_URL = "https://diajb-manga.hf.space";
+
+    const reader = document.getElementById('reader');
+    const urlInput = document.getElementById('urlInput');
+    const loadBtn = document.getElementById('loadBtn');
+    const cropBtn = document.getElementById('cropToggleBtn');
+    const canvas = document.getElementById('selectionCanvas');
+    const ctx = canvas.getContext('2d');
+    const bottomSheet = document.getElementById('bottomSheet');
+    const sheetContent = document.getElementById('sheetContent');
+    const loader = document.getElementById('loader');
+    const vocabModal = document.getElementById('vocabModal');
+    const vocabList = document.getElementById('vocabList');
+
+    let isCropMode = false;
+    let startX = 0, startY = 0, endX = 0, endY = 0;
+    let isDrawing = false;
+    let currentSentence = "";
+    let currentTranslation = "";
+
+    // ----------------- تخزين محلي (IndexedDB) -----------------
+    let db;
+    const request = indexedDB.open("MangaVocabDB", 1);
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      if (!db.objectStoreNames.contains("words")) {
+        db.createObjectStore("words", { keyPath: "word" });
+      }
+    };
+    request.onsuccess = (e) => { db = e.target.result; };
+
+    function saveWord(word, meaning, sentence) {
+      if (!db) return;
+      const tx = db.transaction("words", "readwrite");
+      const store = tx.objectStore("words");
+      store.put({ word: word.trim(), meaning: meaning.trim(), sentence: sentence.trim(), date: new Date().toISOString() });
+    }
+
+    function getAllWords(callback) {
+      if (!db) return callback([]);
+      const tx = db.transaction("words", "readonly");
+      const store = tx.objectStore("words");
+      const req = store.getAll();
+      req.onsuccess = () => callback(req.result);
+    }
+
+    function deleteWordFromDB(word, callback) {
+      if (!db) return;
+      const tx = db.transaction("words", "readwrite");
+      const store = tx.objectStore("words");
+      store.delete(word);
+      tx.oncomplete = () => callback();
+    }
+
+    // ----------------- جلب الفصل وعرضه -----------------
+    async function loadManga() {
+      const url = urlInput.value.trim();
+      if (!url) return alert("يرجى إدخال رابط الفصل.");
+      
+      loadBtn.disabled = true;
+      loadBtn.innerText = "جاري التحميل...";
+      reader.innerHTML = "<p style='margin-top:40px; color:#94a3b8;'>جاري جلب صفحات الفصل من المصدر...</p>";
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/chapter?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        
+        if (!data.success || !data.images.length) {
+          throw new Error("تعذر استخراج الصور من هذا الرابط.");
+        }
+
+        reader.innerHTML = "";
+        data.images.forEach((imgUrl) => {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'page-wrapper';
+          
+          const img = document.createElement('img');
+          img.className = 'manga-page';
+          img.src = `${BACKEND_URL}/api/proxy?img=${encodeURIComponent(imgUrl)}`;
+          img.crossOrigin = "anonymous";
+          img.loading = "lazy";
+          
+          wrapper.appendChild(img);
+          reader.appendChild(wrapper);
+        });
+
+      } catch (err) {
+        reader.innerHTML = `<p style='margin-top:40px; color:#f87171;'>حدث خطأ: ${err.message}</p>`;
+      } finally {
+        loadBtn.disabled = false;
+        loadBtn.innerText = "قراءة";
+      }
+    }
+
+    // ----------------- نمط التحديد باللمس -----------------
+    function toggleCropMode() {
+      isCropMode = !isCropMode;
+      cropBtn.classList.toggle('active', isCropMode);
+      cropBtn.innerText = isCropMode ? '✕' : '✂️';
+      
+      if (isCropMode) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        canvas.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+      } else {
+        canvas.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    function getTouchPos(e) {
+      const t = e.touches ? e.touches[0] : e;
+      return { x: t.clientX, y: t.clientY };
+    }
+
+    canvas.addEventListener('touchstart', (e) => {
+      isDrawing = true;
+      const pos = getTouchPos(e);
+      startX = pos.x;
+      startY = pos.y;
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (!isDrawing) return;
+      const pos = getTouchPos(e);
+      endX = pos.x;
+      endY = pos.y;
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      const w = endX - startX;
+      const h = endY - startY;
+      ctx.clearRect(startX, startY, w, h);
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(startX, startY, w, h);
+    });
+
+    canvas.addEventListener('touchend', async () => {
+      if (!isDrawing) return;
+      isDrawing = false;
+      const rectW = Math.abs(endX - startX);
+      const rectH = Math.abs(endY - startY);
+      
+      if (rectW < 20 || rectH < 20) {
+        toggleCropMode();
+        return;
+      }
+      
+      captureArea(Math.min(startX, endX), Math.min(startY, endY), rectW, rectH);
+      toggleCropMode();
+    });
+
+    function captureArea(x, y, w, h) {
+      const elem = document.elementFromPoint(x + w / 2, y + h / 2);
+      if (!elem || elem.tagName !== 'IMG') {
+        alert("يرجى تحديد فقاعة الحوار فوق صفحة المانجا.");
+        return;
+      }
+
+      const imgRect = elem.getBoundingClientRect();
+      const scaleX = elem.naturalWidth / imgRect.width;
+      const scaleY = elem.naturalHeight / imgRect.height;
+
+      const cropX = (x - imgRect.left) * scaleX;
+      const cropY = (y - imgRect.top) * scaleY;
+      const cropW = w * scaleX;
+      const cropH = h * scaleY;
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = cropW;
+      tempCanvas.height = cropH;
+      const tCtx = tempCanvas.getContext('2d');
+
+      try {
+        tCtx.drawImage(elem, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        const base64Data = tempCanvas.toDataURL('image/jpeg', 0.9);
+        sendToTranslate(base64Data);
+      } catch (err) {
+        alert("فشل التقاط الصورة: " + err.message);
+      }
+    }
+
+    // ----------------- طلب الترجمة الفصيحة وتفكيك الكلمات -----------------
+    async function sendToTranslate(base64Image) {
+      bottomSheet.classList.add('open');
+      sheetContent.style.display = 'none';
+      loader.style.display = 'block';
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/ocr-translate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: base64Image })
+        });
+        const data = await res.json();
+
+        currentSentence = data.english_text || "";
+        currentTranslation = data.arabic_translation || "";
+
+        document.getElementById('englishText').innerText = currentSentence || "تعذر قراءة النص";
+        document.getElementById('arabicText').innerText = currentTranslation || "تعذر الترجمة";
+
+        const wordsBox = document.getElementById('wordsContainer');
+        wordsBox.innerHTML = "";
+        
+        if (data.words && data.words.length) {
+          data.words.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'word-card';
+            card.innerHTML = `
+              <span><b>${item.word}</b>: ${item.meaning}</span>
+              <button class="add-btn" onclick="handleWordAdd(this, '${item.word.replace(/'/g, "\\'")}', '${item.meaning.replace(/'/g, "\\'")}')">+</button>
+            `;
+            wordsBox.appendChild(card);
+          });
+        }
+
+        loader.style.display = 'none';
+        sheetContent.style.display = 'block';
+      } catch (err) {
+        loader.innerText = "خطأ في المعالجة: " + err.message;
+      }
+    }
+
+    function handleWordAdd(btn, word, meaning) {
+      saveWord(word, meaning, currentSentence);
+      btn.innerText = "✓";
+      btn.classList.add('saved');
+      btn.disabled = true;
+    }
+
+    function closeSheet() {
+      bottomSheet.classList.remove('open');
+    }
+
+    // ----------------- إدارة الحافظة وتصدير Anki -----------------
+    function openVocabModal() {
+      vocabModal.style.display = 'flex';
+      renderVocabList();
+    }
+
+    function closeVocabModal() {
+      vocabModal.style.display = 'none';
+    }
+
+    function renderVocabList() {
+      getAllWords((words) => {
+        if (!words.length) {
+          vocabList.innerHTML = "<p style='color:#94a3b8; text-align:center;'>الحافظة فارغة حالياً.</p>";
+          return;
+        }
+        vocabList.innerHTML = "";
+        words.forEach(w => {
+          const div = document.createElement('div');
+          div.className = 'vocab-item';
+          div.innerHTML = `
+            <span><b>${w.word}</b> — ${w.meaning}</span>
+            <button class="delete-btn" onclick="handleDeleteWord('${w.word.replace(/'/g, "\\'")}')">✕</button>
+          `;
+          vocabList.appendChild(div);
+        });
+      });
+    }
+
+    function handleDeleteWord(word) {
+      deleteWordFromDB(word, () => renderVocabList());
+    }
+
+    function clearAllVocab() {
+      if (confirm("هل تريد تفريغ كامل الكلمات المحفوظة؟")) {
+        const tx = db.transaction("words", "readwrite");
+        tx.objectStore("words").clear();
+        tx.oncomplete = () => renderVocabList();
+      }
+    }
+
+    // تصدير ملف متوافق مع Anki بضغطة زر
+    function exportAnkiTSV() {
+      getAllWords((words) => {
+        if (!words.length) return alert("لا توجد كلمات لتصديرها.");
+        
+        let tsvContent = "";
+        words.forEach(w => {
+          // صيغة أنكي القياسية: الكلمة [Tab] المعنى [Tab] جملة السياق
+          tsvContent += `${w.word}\t${w.meaning}\t${w.sentence}\n`;
+        });
+
+        const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `Anki_Manga_Vocab_${new Date().toISOString().slice(0,10)}.tsv`;
+        link.click();
+      });
+    }
+  </script>
+</body>
+</html>
