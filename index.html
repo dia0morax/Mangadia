@@ -397,24 +397,44 @@
       }
 
 
-      /* هايلايت ماركر شفاف ومقفل الارتفاع لسطر واحد بدون أي خطوط مصمتة */
+      /* هايلايت ماركر ذكي ودقيق يطابق موضع وأبعاد الكلمة الحقيقية */
       .manga-word-highlight {
         position: absolute !important;
-        background: rgba(239, 68, 68, 0.25) !important;
-        border: none !important;
-        border-radius: 4px !important;
-        box-shadow: none !important;
-        animation: highlightFade 0.25s ease-out;
+        background: rgba(239, 68, 68, 0.32) !important;
+        border-bottom: 2px solid #ef4444 !important;
+        border-radius: 3px !important;
+        animation: highlightFade 0.2s ease-out;
         pointer-events: auto;
         cursor: pointer;
-        mix-blend-mode: multiply;
-        height: 14px !important;
-        max-height: 16px !important;
         transition: background 0.2s;
+        z-index: 35 !important;
       }
       .manga-word-highlight:active {
-        background: rgba(239, 68, 68, 0.42) !important;
+        background: rgba(239, 68, 68, 0.55) !important;
       }
+
+      /* شارة تقدم فحص الصفحة الحالية والتالية التفاعلية */
+      .page-ocr-status {
+        margin-right: 8px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 4px;
+        background: rgba(56, 189, 248, 0.15);
+        color: #38bdf8;
+        display: none;
+      }
+      .page-ocr-status.scanning {
+        display: inline-block;
+        color: #facc15;
+        background: rgba(250, 204, 21, 0.15);
+      }
+      .page-ocr-status.done {
+        display: inline-block;
+        color: #4ade80;
+        background: rgba(74, 222, 128, 0.15);
+      }
+
 
 
       @keyframes highlightFade { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
@@ -1865,12 +1885,13 @@
 
             const indicator = document.createElement('div');
             indicator.className = 'page-indicator';
-            indicator.innerText = `${pageNum} / ${data.images.length}`;
+            indicator.innerHTML = `<span>${pageNum} / ${data.images.length}</span><span id="ocr_status_p${pageNum}" class="page-ocr-status"></span>`;
 
             wrapper.appendChild(img);
             wrapper.appendChild(hlLayer);
             wrapper.appendChild(indicator);
             reader.appendChild(wrapper);
+
           }
 
           applySavedMangaHighlights(url);
@@ -1977,41 +1998,68 @@
         } catch(e) {}
       }
 
-      // فحص صفحة معينة وتطبيق الهايلايت (يدعم التفعيل القسري عند إضافة كلمة جديدة)
+      function updatePageOcrBadge(pageNum, state, percentText) {
+        const badge = document.getElementById(`ocr_status_p${pageNum}`);
+        if (!badge) return;
+        if (!isAutoOCREnabled && state !== 'done') {
+          badge.style.display = 'none';
+          return;
+        }
+        badge.className = `page-ocr-status ${state}`;
+        badge.innerText = percentText;
+      }
+
+      // فحص صفحة معينة وتحديث النسبة المئوية وتسجيل أي خطأ يصدر من Gemini
       async function triggerLazyPageOCR(wrapper, pageNum, forceScan = false) {
         if (!currentChapterUrl || !wrapper) return;
         const cacheKey = `${currentChapterUrl}_p${pageNum}`;
 
         let ocrWords = await getCachedPageOCR(cacheKey);
 
-        if (!ocrWords) {
-          // إذا لم يكن استدعاءً إجبارياً وكان المسح التلقائي معطلاً، نخرج لتوفير الباقة
-          if (!forceScan && !isAutoOCREnabled) return;
-          if (!forceScan && checkScrollThrottle()) return;
-
-          const imgElem = wrapper.querySelector('.manga-page');
-          const rawSrc = imgElem ? imgElem.src : "";
-          if (!rawSrc) return;
-
-
-          try {
-            const res = await fetch(`${BACKEND_URL}/api/page-ocr`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ image_url: rawSrc })
-            });
-            const data = await res.json();
-            if (data && data.words) {
-              ocrWords = data.words;
-              setCachedPageOCR(cacheKey, ocrWords);
-            }
-          } catch(err) {
-            logError("Page OCR Error", err.message);
-          }
+        if (ocrWords) {
+          updatePageOcrBadge(pageNum, 'done', 'فحص 100%');
+          matchAndHighlightPage(wrapper, ocrWords);
+          return;
         }
 
-        if (ocrWords && ocrWords.length) {
-          matchAndHighlightPage(wrapper, ocrWords);
+        if (!forceScan && !isAutoOCREnabled) return;
+        if (!forceScan && checkScrollThrottle()) return;
+
+        const originalImgUrl = (currentChapterImages && currentChapterImages[pageNum - 1]) 
+          ? currentChapterImages[pageNum - 1] 
+          : "";
+        if (!originalImgUrl) return;
+
+        updatePageOcrBadge(pageNum, 'scanning', 'فحص 35%...');
+
+        try {
+          const proxyFetchUrl = `${BACKEND_URL}/api/proxy?img=${encodeURIComponent(originalImgUrl)}`;
+          updatePageOcrBadge(pageNum, 'scanning', 'تحليل 70%...');
+
+          const res = await fetch(`${BACKEND_URL}/api/page-ocr`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_url: proxyFetchUrl })
+          });
+          const data = await res.json();
+
+          if (data && data.error) {
+            logError(`Gemini OCR [صفحة ${pageNum}]`, data.error);
+            updatePageOcrBadge(pageNum, 'scanning', 'فشل الفحص');
+            return;
+          }
+
+          if (data && data.words) {
+            ocrWords = data.words;
+            setCachedPageOCR(cacheKey, ocrWords);
+            updatePageOcrBadge(pageNum, 'done', 'فحص 100%');
+            matchAndHighlightPage(wrapper, ocrWords);
+          } else {
+            updatePageOcrBadge(pageNum, 'done', 'فحص 100%');
+          }
+        } catch(err) {
+          logError(`فشل اتصال OCR [صفحة ${pageNum}]`, err.message);
+          updatePageOcrBadge(pageNum, 'scanning', 'خطأ اتصال');
         }
       }
 
@@ -2025,34 +2073,49 @@
       }
 
       function matchAndHighlightPage(wrapper, ocrWords) {
+        if (!wrapper || !ocrWords || !ocrWords.length) return;
+
         getAllWords((savedWordsList) => {
           if (!savedWordsList || !savedWordsList.length) return;
-          const savedMap = new Map();
+
+          // استخراج الكلمات المحفوظة وتجهيز صيغها النقية
+          const savedDict = new Map();
           savedWordsList.forEach(w => {
             if (w && w.word) {
-              savedMap.set(w.word.toLowerCase().trim(), w);
+              const pure = w.word.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+              if (pure.length >= 2) {
+                savedDict.set(pure, w);
+              }
             }
           });
 
+          if (!savedDict.size) return;
+
           ocrWords.forEach(item => {
-            const cleanText = (item.text || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (savedMap.has(cleanText)) {
-              const savedItem = savedMap.get(cleanText);
-              const b = item.box || {};
+            const wordRaw = (item.text || "").toLowerCase().trim();
+            const wordClean = wordRaw.replace(/[^a-z0-9]/g, '');
+            const b = item.box || {};
+
+            // مطابقة الكلمة مباشرة أو التحقق من وجودها
+            if (savedDict.has(wordClean)) {
+              const saved = savedDict.get(wordClean);
               const boxData = {
-                left: b.left || 0,
-                top: b.top || 0,
-                width: b.width || 0,
-                height: b.height || 0,
-                word: savedItem.word,
-                meaning: savedItem.meaning || "محفوظة بالحافظة",
-                sentence: savedItem.sentence || ""
+                left: Math.max(0, parseFloat(b.left) || 0),
+                top: Math.max(0, parseFloat(b.top) || 0),
+                width: Math.min(100, Math.max(parseFloat(b.width) || 2, 1.5)),
+                height: Math.min(100, Math.max(parseFloat(b.height) || 1.2, 0.8)),
+                word: saved.word,
+                meaning: saved.meaning || "محفوظة بالحافظة",
+                sentence: saved.sentence || ""
               };
               drawWordHighlightOnPage(wrapper, boxData);
             }
           });
         });
       }
+
+
+
 
       let trackerObserver = null;
       function setupPageTracker() {
@@ -2446,8 +2509,32 @@
 
 
 
-      // جلب كافة الكلمات بشكل فوري وآمن يمنع تعليق شاشة التحميل
+      // جلب كافة الكلمات مع إعطاء الأولوية القصوى لسحابة Firestore وضمان دقة التعرف
       function getAllWords(callback) {
+        if (firestoreDB && currentAuthUser) {
+          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("words").get().then(snap => {
+            const cloudWords = [];
+            snap.forEach(d => cloudWords.push(d.data()));
+            if (cloudWords.length > 0) {
+              // تحديث الذاكرة المحلية ككاش احتياطي
+              if (db) {
+                try {
+                  const tx = db.transaction("words", "readwrite");
+                  const store = tx.objectStore("words");
+                  cloudWords.forEach(w => store.put(w));
+                } catch(e){}
+              }
+              callback(cloudWords);
+            } else {
+              fallbackLocalWords(callback);
+            }
+          }).catch(() => fallbackLocalWords(callback));
+        } else {
+          fallbackLocalWords(callback);
+        }
+      }
+
+      function fallbackLocalWords(callback) {
         if (!db) return callback([]);
         try {
           const tx = db.transaction("words", "readonly");
@@ -2459,6 +2546,7 @@
           callback([]);
         }
       }
+
 
 
 
@@ -2590,8 +2678,10 @@
       function handleWordAdd(btn, word, meaning) {
         const cleanWord = word.trim();
         const todayStr = new Date().toISOString().slice(0, 10);
+        const safeDocId = encodeURIComponent(cleanWord.toLowerCase()).replace(/\./g, '%2E').replace(/\//g, '%2F');
+        
         const record = {
-          id: `${cleanWord.toLowerCase()}_${todayStr}`,
+          id: safeDocId,
           word: cleanWord,
           meaning: meaning.trim(),
           sentence: currentSentence || "",
@@ -2599,23 +2689,25 @@
           timestamp: Date.now()
         };
 
-        // 1. الحفظ الفوري في قاعدة البيانات المحلية مع تحديث الحافظة فوراً
-        if (db) {
-          const tx = db.transaction("words", "readwrite");
-          tx.objectStore("words").put(record);
-          tx.oncomplete = () => {
-            renderVocabByDays();
-          };
-        }
-
-        // 2. المزامنة المباشرة مع سحابة Google Firestore
+        // 1. الحفظ السحابي المباشر في حساب Google Firestore أولاً
         if (firestoreDB && currentAuthUser) {
-          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("words").doc(record.id).set(record, { merge: true })
-            .then(() => renderVocabByDays())
-            .catch(e => logError("Cloud Vocab", e));
+          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("words").doc(safeDocId).set(record, { merge: true })
+            .then(() => {
+              renderVocabByDays();
+            })
+            .catch(e => logError("Cloud Vocab Error", e.message));
         }
 
-        // 3. تغيير حالة الزر وتلوين الكلمة في نافذة الترجمة
+        // 2. الحفظ في الذاكرة المحلية ككاش احتياطي فوري
+        if (db) {
+          try {
+            const tx = db.transaction("words", "readwrite");
+            tx.objectStore("words").put(record);
+            tx.oncomplete = () => renderVocabByDays();
+          } catch(e){}
+        }
+
+        // 3. تحديث واجهة زر الإضافة وتلوين الكلمة بالأحمر في صندوق الترجمة
         btn.innerHTML = `<i class="fa-solid fa-check"></i>`;
         btn.classList.add('saved');
         btn.disabled = true;
@@ -2629,7 +2721,7 @@
           } catch(e) {}
         }
 
-        // 4. تسليط الهايلايت الدقيق على الكلمة فوراً في الصفحة الحالية
+        // 4. إجبار فحص الصفحة الحالية فوراً وتثبيت الهايلايتر فوق الكلمة بدقة
         if (lastSelectedWrapper) {
           const pageNum = parseInt(lastSelectedWrapper.dataset.page || "1", 10);
           triggerLazyPageOCR(lastSelectedWrapper, pageNum, true);
@@ -2637,21 +2729,27 @@
       }
 
 
+
       function drawWordHighlightOnPage(wrapper, box) {
         const layer = wrapper.querySelector('.manga-highlight-layer');
         if (!layer) return;
 
-        // تفادي تكرار نفس الهايلايت
-        const existing = layer.querySelector(`[data-word="${box.word.toLowerCase()}"]`);
+        const wordKey = box.word.toLowerCase().trim();
+        // التحقق من عدم رسم نفس الصندوق في نفس الموضع تقريباً لتجنب التكرار
+        const existing = layer.querySelector(`[data-word="${wordKey}"][data-top="${Math.round(box.top)}"]`);
         if (existing) return;
 
         const hl = document.createElement('div');
         hl.className = 'manga-word-highlight';
-        hl.dataset.word = box.word.toLowerCase();
+        hl.dataset.word = wordKey;
+        hl.dataset.top = Math.round(box.top);
         hl.style.left = `${box.left}%`;
         hl.style.top = `${box.top}%`;
         hl.style.width = `${box.width}%`;
         hl.style.height = `${box.height}%`;
+        hl.style.display = 'block';
+        hl.style.position = 'absolute';
+        hl.style.zIndex = '30';
         hl.title = box.word;
 
         hl.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
@@ -2668,6 +2766,7 @@
 
         layer.appendChild(hl);
       }
+
 
       function applySavedMangaHighlights(chapterUrl) {
         document.querySelectorAll('.page-wrapper').forEach(wrapper => {
