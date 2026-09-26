@@ -419,7 +419,7 @@
 
     @keyframes highlightFade { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
-    /* وضع ملء الشاشة الانغماسي النظيف مع الحفاظ على حرية زووم المتصفح */
+    /* وضع ملء الشاشة الانغماسي النظيف مع استعادة الزوم الطبيعي الكامل */
     body.is-fullscreen header,
     body.is-fullscreen .fab-group,
     body.is-fullscreen #errorBadge,
@@ -430,23 +430,21 @@
       background: #000 !important;
       margin: 0 !important;
       padding: 0 !important;
-      overflow-x: visible !important;
+      touch-action: pan-x pan-y pinch-zoom !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
     }
-    body.is-fullscreen #readerView {
-      padding: 0 !important;
-      margin: 0 !important;
-      max-width: 100% !important;
-      width: 100% !important;
-    }
-    body.is-fullscreen #reader {
-      max-width: 100% !important;
-      width: 100% !important;
-    }
+    body.is-fullscreen #readerView,
+    body.is-fullscreen #reader,
+    body.is-fullscreen .page-wrapper,
     body.is-fullscreen .manga-page {
-      width: 100% !important;
+      touch-action: pan-x pan-y pinch-zoom !important;
       max-width: 100% !important;
-      display: block !important;
+      width: 100% !important;
     }
+
+
+
 
 
 
@@ -890,23 +888,23 @@
     </div>
   </div>
 
-  <!-- زر الخروج المصغر من ملء الشاشة بالزاوية -->
-  <button id="exitFullscreenBtn" onclick="toggleAppFullscreen()" title="الخروج من ملء الشاشة">
-    <i class="fa-solid fa-compress"></i>
-  </button>
-
   <!-- ================= واجهة القارئ الطبيعية ================= -->
   <div id="readerView" class="view-container" style="padding:0;">
+    <!-- زر الخروج المصغر داخل الحاوية ليبقى ظاهراً في ملء الشاشة الفعلي -->
+    <button id="exitFullscreenBtn" onclick="toggleAppFullscreen()" title="الخروج من ملء الشاشة">
+      <i class="fa-solid fa-compress"></i>
+    </button>
     <div id="reader"></div>
   </div>
+
 
   <!-- مجموعة الأزرار العائمة باليمين -->
   <div class="fab-group">
     <button class="fab fab-home" id="homeFab" onclick="showLibraryView()" style="display:none;" title="العودة للمكتبة"><i class="fa-solid fa-house"></i></button>
     <button class="fab" id="fullscreenFab" onclick="toggleAppFullscreen()" style="display:none; background: linear-gradient(135deg, #0284c7, #0369a1);" title="ملء الشاشة بالكامل"><i class="fa-solid fa-expand"></i></button>
     <button class="fab fab-vocab" onclick="openVocabModal()" title="حافظة الأيام وأنكي"><i class="fa-solid fa-graduation-cap"></i></button>
-    <button class="fab fab-crop" id="cropToggleBtn" onclick="toggleCropMode()" style="display:none;" title="قص يدوي احتياطي"><i class="fa-solid fa-crop-simple"></i></button>
   </div>
+
 
 
 
@@ -955,11 +953,12 @@
 
 
   <!-- نافذة الترجمة السفلية -->
-  <div id="bottomSheet">
+  <div id="bottomSheet" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" onclick="event.stopPropagation()">
     <div class="sheet-header">
       <span class="sheet-title"><i class="fa-solid fa-wand-magic-sparkles" style="color:#38bdf8;"></i> الترجمة الفصيحة وتفكيك المعاني</span>
-      <button class="close-btn" onclick="closeSheet()"><i class="fa-solid fa-xmark"></i></button>
+      <button class="close-btn" ontouchstart="event.stopPropagation()" onclick="event.stopPropagation(); closeSheet();"><i class="fa-solid fa-xmark"></i></button>
     </div>
+
     <div id="loader" class="loader"><i class="fa-solid fa-spinner fa-spin"></i> جاري قراءة الحوار وترجمته بالعربية الفصيحة...</div>
     <div id="sheetContent" style="display:none;">
       <div class="section-title">النص الإنجليزي الأصلي</div>
@@ -1036,8 +1035,8 @@
     const urlInput = document.getElementById('urlInput');
     const loadBtn = document.getElementById('loadBtn');
     const homeFab = document.getElementById('homeFab');
-    const cropBtn = document.getElementById('cropToggleBtn');
     const canvas = document.getElementById('selectionCanvas');
+
     const ctx = canvas ? canvas.getContext('2d') : null;
     let isCropMode = false;
     let cropStartX = 0, cropStartY = 0, cropEndX = 0, cropEndY = 0;
@@ -1425,34 +1424,36 @@
     const fullscreenFab = document.getElementById('fullscreenFab');
 
     function showLibraryView() {
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(()=>{});
-      }
       document.body.classList.remove('is-fullscreen');
       libraryView.style.display = 'block';
       readerView.style.display = 'none';
       homeFab.style.display = 'none';
-      if (cropBtn) cropBtn.style.display = 'none';
       if (fullscreenFab) fullscreenFab.style.display = 'none';
       window.scrollTo({ top: 0, behavior: 'smooth' });
       renderLibrary();
       checkLastRead();
     }
 
+
     function showReaderView() {
       libraryView.style.display = 'none';
       readerView.style.display = 'block';
       homeFab.style.display = 'flex';
-      if (cropBtn) cropBtn.style.display = 'flex';
       if (fullscreenFab) fullscreenFab.style.display = 'flex';
     }
 
-
-
-    // تبديل وضع ملء الشاشة البصري النقي دون تعطيل محرك زووم المتصفح
+    // تفعيل ملء الشاشة البصري الانغماسي الذي يحافظ على الزوم الطبيعي بنسبة 100%
     function toggleAppFullscreen() {
       document.body.classList.toggle('is-fullscreen');
+      if (document.body.classList.contains('is-fullscreen')) {
+        // إزاحة خفيفة بمقدار بكسل واحد تؤدي لطي وإخفاء شريط عنوان المتصفح تلقائياً على الجوال
+        window.scrollBy(0, 1);
+      }
     }
+
+
+
+
 
 
 
@@ -1634,58 +1635,109 @@
 
 
 
-    // ----------------- نظام القص اليدوي الاحترازي + الضغط المطول الذكي -----------------
+    // ================= نظام التفاعل المزدوج الذكي =================
+    // (نقرة سريعة = مربع ذكي ثابت / ضغطة مستمرة مع سحب = تحديد حر يدوي)
     let lastSelectedWrapper = null;
     let lastRelativeBox = null;
     let longPressTimer = null;
     let previewDelayTimer = null;
     let touchStartPos = { x: 0, y: 0 };
     let hasMoved = false;
+    let isDragSelectionActive = false;
+    let activeTargetImg = null;
     let activePreviewBoxEl = null;
 
-    // 1. تشغيل وإيقاف نمط القص اليدوي بالأصبع
-    function toggleCropMode() {
-      if (!canvas) return;
-      isCropMode = !isCropMode;
-      cropBtn.classList.toggle('active', isCropMode);
-      cropBtn.innerHTML = isCropMode ? '<i class="fa-solid fa-xmark"></i>' : '<i class="fa-solid fa-crop-simple"></i>';
 
-      if (isCropMode) {
-        cancelLongPress();
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = window.innerWidth * dpr;
-        canvas.height = window.innerHeight * dpr;
-        canvas.style.width = window.innerWidth + 'px';
-        canvas.style.height = window.innerHeight + 'px';
-        ctx.scale(dpr, dpr);
-        canvas.style.display = 'block';
-        document.body.style.overflow = 'hidden';
-      } else {
-        canvas.style.display = 'none';
-        document.body.style.overflow = 'auto';
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // منع قائمة السياق وحفظ الصورة عند الضغط المستمر
+    window.addEventListener('contextmenu', (e) => {
+      if (e.target.tagName === 'IMG' || e.target.closest('#reader')) {
+        e.preventDefault();
+        return false;
       }
+    });
+
+    // دالة ضمان بقاء نافذة الترجمة بالحجم والشكل الطبيعي مهما كبّرت المانجا
+    function fixSheetScaleToScreen() {
+      if (!window.visualViewport) return;
+      const vv = window.visualViewport;
+      const zoomFactor = vv.scale || 1;
+      bottomSheet.style.transform = `scale(${1 / zoomFactor})`;
+      bottomSheet.style.width = `${vv.width * zoomFactor}px`;
+      bottomSheet.style.left = `${vv.offsetLeft}px`;
+      bottomSheet.style.bottom = `${-vv.offsetTop}px`;
     }
 
-    // 2. أحداث رسم مربع القص اليدوي على الكانفاس
-    if (canvas) {
-      canvas.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        isManualDrawing = true;
-        const t = e.touches[0];
-        cropStartX = t.clientX;
-        cropStartY = t.clientY;
-        cropEndX = t.clientX;
-        cropEndY = t.clientY;
-      }, { passive: false });
+    // تجهيز كانفاس التحديد الحر
+    function prepareCanvasForDrag() {
+      if (!canvas || !ctx) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+      canvas.style.display = 'block';
+    }
 
-      canvas.addEventListener('touchmove', (e) => {
+    function hideSelectionCanvas() {
+      if (!canvas || !ctx) return;
+      canvas.style.display = 'none';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      isDragSelectionActive = false;
+    }
+
+    document.addEventListener('touchstart', (e) => {
+      // تجاهل اللمس نهائياً إذا كان فوق نافذة الترجمة، الأزرار، النوافذ، أو فوق الهايلايتر الأحمر نفسه
+      if (e.target.closest('.manga-word-highlight') || e.target.closest('#bottomSheet') || e.target.closest('.fab-group') || e.target.closest('.modal-overlay') || e.target.closest('header') || e.target.closest('#exitFullscreenBtn')) {
+        cancelTouchState();
+        return;
+      }
+
+
+      if (e.touches.length > 1) {
+        cancelTouchState();
+        return;
+      }
+
+      const touch = e.touches[0];
+      touchStartPos = { x: touch.clientX, y: touch.clientY };
+      hasMoved = false;
+      isDragSelectionActive = false;
+
+      activeTargetImg = getMangaImageAtPoint(touch.clientX, touch.clientY);
+      if (!activeTargetImg) return;
+
+
+      // إذا استمر الضغط لأكثر من 300ms يتحول تلقائياً إلى وضع السحب والتحديد الحر
+      longPressTimer = setTimeout(() => {
+        if (!hasMoved) {
+          isDragSelectionActive = true;
+          if (navigator.vibrate) navigator.vibrate(45);
+          prepareCanvasForDrag();
+          cropStartX = touch.clientX;
+          cropStartY = touch.clientY;
+          cropEndX = touch.clientX;
+          cropEndY = touch.clientY;
+        }
+      }, 300);
+    }, { passive: false });
+
+    document.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 1) {
+        cancelTouchState();
+        return;
+      }
+
+      const touch = e.touches[0];
+      const diffX = Math.abs(touch.clientX - touchStartPos.x);
+      const diffY = Math.abs(touch.clientY - touchStartPos.y);
+
+      // إذا تفعل وضع التحديد بالسحب المستمر: نقوم برسم المربع الحر
+      if (isDragSelectionActive) {
         e.preventDefault();
-        if (!isManualDrawing) return;
-        const t = e.touches[0];
-        cropEndX = t.clientX;
-        cropEndY = t.clientY;
+        cropEndX = touch.clientX;
+        cropEndY = touch.clientY;
 
         const left = Math.min(cropStartX, cropEndX);
         const top = Math.min(cropStartY, cropEndY);
@@ -1693,33 +1745,68 @@
         const h = Math.abs(cropEndY - cropStartY);
 
         ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
         ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
         ctx.clearRect(left, top, w, h);
         ctx.strokeStyle = "#38bdf8";
         ctx.lineWidth = 2.5;
         ctx.strokeRect(left, top, w, h);
-      }, { passive: false });
+        return;
+      }
 
-      canvas.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        if (!isManualDrawing) return;
-        isManualDrawing = false;
+      // إذا كان تحريكاً عاديّاً للشاشة قبل تفعيل السحب، نلغي المؤقت ليبقى التمرير سلساً
+      if (diffX > 10 || diffY > 10) {
+        hasMoved = true;
+        clearTimeout(longPressTimer);
+      }
+    }, { passive: false });
 
+    document.addEventListener('touchend', (e) => {
+      // إذا كان الإصبع فوق الهايلايتر الأحمر أو النوافذ أو الأزرار، نلغي الاقتصاص التلقائي فوراً
+      if (e.target.closest('.manga-word-highlight') || e.target.closest('#bottomSheet') || e.target.closest('.fab-group') || e.target.closest('.modal-overlay') || e.target.closest('header') || e.target.closest('#exitFullscreenBtn')) {
+        cancelTouchState();
+        return;
+      }
+
+
+      // 1. إذا كان المستخدم في وضع السحب المستمر ورفع إصبعه: يقتطع المربع المختار
+      if (isDragSelectionActive) {
         const left = Math.min(cropStartX, cropEndX);
         const top = Math.min(cropStartY, cropEndY);
         const w = Math.abs(cropEndX - cropStartX);
         const h = Math.abs(cropEndY - cropStartY);
+        hideSelectionCanvas();
 
-        toggleCropMode();
-        if (w > 15 && h > 15) {
+        if (w > 18 && h > 18) {
           executeManualAreaCrop(left, top, w, h);
         }
-      }, { passive: false });
+        cancelTouchState();
+        return;
+      }
+
+      // 2. إذا كانت نقرة واحدة سريعة وثابتة (لم يُسحب ولم يتحرك التمرير): يضع المربع الثابت الذكي
+      if (!hasMoved && activeTargetImg && longPressTimer) {
+        clearTimeout(longPressTimer);
+        const touch = e.changedTouches ? e.changedTouches[0] : touchStartPos;
+        const calcBox = calculateBubbleBox(touch.clientX, touch.clientY, activeTargetImg);
+        triggerSmartBubbleDetection(touch.clientX, touch.clientY, activeTargetImg, calcBox);
+      }
+
+      cancelTouchState();
+    }, { passive: true });
+
+
+    document.addEventListener('touchcancel', cancelTouchState, { passive: true });
+
+    function cancelTouchState() {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+      activeTargetImg = null;
+      if (isDragSelectionActive) hideSelectionCanvas();
     }
 
-    // 3. اقتصاص الصورة وإرسالها للترجمة عند الانتهاء من الرسم اليدوي
+    // اقتصاص المنطقة التي حددها المستخدم بالسحب المستمر
     function executeManualAreaCrop(x, y, w, h) {
       const centerX = x + w / 2;
       const centerY = y + h / 2;
@@ -1766,85 +1853,6 @@
       }
     }
 
-    // منع قائمة السياق الافتراضية وحفظ الصورة عند الضغط المطول
-    window.addEventListener('contextmenu', (e) => {
-      if (e.target.tagName === 'IMG' || e.target.closest('#reader')) {
-        e.preventDefault();
-        return false;
-      }
-    });
-
-    // ================= معالجة اللمس النظيفة: تمرير حر وزووم ثابت واكتشاف ذكي للفقاعات =================
-    // دالة ضمان بقاء نافذة الترجمة بالحجم وموضع الشاشة الطبيعي تماماً مهما كبّرت المانجا
-    function fixSheetScaleToScreen() {
-      if (!window.visualViewport) return;
-      const vv = window.visualViewport;
-      const zoomFactor = vv.scale || 1;
-      
-      // معادلة نسبة الزووم المعكوسة لتبقى أبعاد وخطوط النافذة مطابقة للشاشة تماماً
-      bottomSheet.style.transform = `scale(${1 / zoomFactor})`;
-      bottomSheet.style.width = `${vv.width * zoomFactor}px`;
-      bottomSheet.style.left = `${vv.offsetLeft}px`;
-      bottomSheet.style.bottom = `${-vv.offsetTop}px`;
-    }
-
-    document.addEventListener('touchstart', (e) => {
-      // إذا كان اللمس بإصبعين للزووم نترك التكبير الطبيعي السلس للمتصفح دون أي قيد
-      if (e.touches.length > 1) {
-        cancelLongPress();
-        return;
-      }
-
-      if (isCropMode) {
-        cancelLongPress();
-        return;
-      }
-
-      const touch = e.touches[0];
-      touchStartPos = { x: touch.clientX, y: touch.clientY };
-      hasMoved = false;
-
-      const targetImg = getMangaImageAtPoint(touch.clientX, touch.clientY);
-      if (!targetImg) return;
-
-      const calcBox = calculateBubbleBox(touch.clientX, touch.clientY, targetImg);
-      const wrapper = targetImg.closest('.page-wrapper');
-
-      // إظهار المربع التوضيحي فقط عند الثبات وليس أثناء التمرير العادي
-      previewDelayTimer = setTimeout(() => {
-        if (!hasMoved && !isCropMode) {
-          showTargetPreview(wrapper, calcBox);
-        }
-      }, 160);
-
-      longPressTimer = setTimeout(() => {
-        if (!hasMoved && !isCropMode) {
-          if (navigator.vibrate) navigator.vibrate(50);
-          removeTargetPreview();
-          triggerSmartBubbleDetection(touch.clientX, touch.clientY, targetImg, calcBox);
-        }
-      }, 480);
-    }, { passive: true });
-
-    document.addEventListener('touchmove', (e) => {
-      if (e.touches.length > 1) {
-        cancelLongPress();
-        return;
-      }
-
-      const touch = e.touches[0];
-      const diffX = Math.abs(touch.clientX - touchStartPos.x);
-      const diffY = Math.abs(touch.clientY - touchStartPos.y);
-
-      // إذا تحرك الإصبع للتمرير يلغى مؤقت الضغط المطول فوراً ويبقى التمرير سلساً
-      if (diffX > 10 || diffY > 10) {
-        hasMoved = true;
-        cancelLongPress();
-      }
-    }, { passive: true });
-
-    document.addEventListener('touchend', cancelLongPress, { passive: true });
-    document.addEventListener('touchcancel', cancelLongPress, { passive: true });
 
 
 
@@ -2280,7 +2288,14 @@
       hl.style.height = `${box.height}%`;
       hl.title = box.word;
       
-      // النقر على الهايلايتر لفتح بطاقة الكلمة بتصميم الموقع الأنيق
+      // منع تسريب اللمس للطبقة السفلية لضمان عدم إطلاق الترجمة الذكية
+      hl.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
+      hl.addEventListener('touchend', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        showWordDetail(box.word, box.meaning || 'محفوظة بالحافظة', box.sentence || '');
+      }, { passive: false });
+
       hl.onclick = (e) => {
         e.stopPropagation();
         showWordDetail(box.word, box.meaning || 'محفوظة بالحافظة', box.sentence || '');
@@ -2288,6 +2303,7 @@
 
       layer.appendChild(hl);
     }
+
 
 
     // حفظ موقع ومفردة الهايلايت محلياً وسحابياً للمزامنة عبر كل الفصول
