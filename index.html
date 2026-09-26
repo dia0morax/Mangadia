@@ -335,84 +335,143 @@
       }
     }
 
-    // ----------------- نمط التحديد باللمس -----------------
+    // ----------------- نمط التحديد باللمس (مُحسّن للشاشات عالية الدقة) -----------------
     function toggleCropMode() {
       isCropMode = !isCropMode;
       cropBtn.classList.toggle('active', isCropMode);
       cropBtn.innerText = isCropMode ? '✕' : '✂️';
       
       if (isCropMode) {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        canvas.style.width = window.innerWidth + 'px';
+        canvas.style.height = window.innerHeight + 'px';
+        ctx.scale(dpr, dpr);
         canvas.style.display = 'block';
         document.body.style.overflow = 'hidden';
       } else {
         canvas.style.display = 'none';
         document.body.style.overflow = 'auto';
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
     }
 
     function getTouchPos(e) {
-      const t = e.touches ? e.touches[0] : e;
+      const t = (e.touches && e.touches.length > 0) ? e.touches[0] : (e.changedTouches ? e.changedTouches[0] : e);
       return { x: t.clientX, y: t.clientY };
     }
 
     canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
       isDrawing = true;
       const pos = getTouchPos(e);
       startX = pos.x;
       startY = pos.y;
-    });
+      endX = pos.x;
+      endY = pos.y;
+    }, { passive: false });
 
     canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
       if (!isDrawing) return;
       const pos = getTouchPos(e);
       endX = pos.x;
       endY = pos.y;
       
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      const w = endX - startX;
-      const h = endY - startY;
-      ctx.clearRect(startX, startY, w, h);
-      ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(startX, startY, w, h);
-    });
+      const left = Math.min(startX, endX);
+      const top = Math.min(startY, endY);
+      const w = Math.abs(endX - startX);
+      const h = Math.abs(endY - startY);
 
-    canvas.addEventListener('touchend', async () => {
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+      
+      ctx.clearRect(left, top, w, h);
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(left, top, w, h);
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
       if (!isDrawing) return;
       isDrawing = false;
-      const rectW = Math.abs(endX - startX);
-      const rectH = Math.abs(endY - startY);
+
+      const pos = getTouchPos(e);
+      endX = pos.x;
+      endY = pos.y;
+
+      const left = Math.min(startX, endX);
+      const top = Math.min(startY, endY);
+      const w = Math.abs(endX - startX);
+      const h = Math.abs(endY - startY);
       
-      if (rectW < 20 || rectH < 20) {
-        toggleCropMode();
-        return;
+      // إغلاق وضع التحديد والكانفاس أولاً قبل التقاط الصورة
+      toggleCropMode();
+
+      if (w < 15 || h < 15) {
+        return; // لمسة عارضة مهملة
       }
       
-      captureArea(Math.min(startX, endX), Math.min(startY, endY), rectW, rectH);
-      toggleCropMode();
-    });
+      captureArea(left, top, w, h);
+    }, { passive: false });
 
     function captureArea(x, y, w, h) {
-      const elem = document.elementFromPoint(x + w / 2, y + h / 2);
-      if (!elem || elem.tagName !== 'IMG') {
-        alert("يرجى تحديد فقاعة الحوار فوق صفحة المانجا.");
+      // البحث عن صورة المانجا بدقة عبر فحص كل العناصر تحت الإحداثيات
+      const centerX = x + w / 2;
+      const centerY = y + h / 2;
+      const elements = document.elementsFromPoint(centerX, centerY);
+      
+      let imgElem = null;
+      for (const el of elements) {
+        if (el.tagName === 'IMG' && el.classList.contains('manga-page')) {
+          imgElem = el;
+          break;
+        }
+      }
+
+      // إذا لم يعثر بالمنتصف، يفحص الزوايا الأربع للتحديد
+      if (!imgElem) {
+        const testPoints = [
+          [x + 2, y + 2],
+          [x + w - 2, y + 2],
+          [x + 2, y + h - 2],
+          [x + w - 2, y + h - 2]
+        ];
+        for (const [px, py] of testPoints) {
+          const els = document.elementsFromPoint(px, py);
+          for (const el of els) {
+            if (el.tagName === 'IMG' && el.classList.contains('manga-page')) {
+              imgElem = el;
+              break;
+            }
+          }
+          if (imgElem) break;
+        }
+      }
+
+      if (!imgElem) {
+        logError("تعذر العثور على صورة المانجا تحت التحديد", { x, y, w, h });
+        alert("يرجى التأكد من التحديد فوق صفحة المانجا.");
         return;
       }
 
-      const imgRect = elem.getBoundingClientRect();
-      const scaleX = elem.naturalWidth / imgRect.width;
-      const scaleY = elem.naturalHeight / imgRect.height;
+      const imgRect = imgElem.getBoundingClientRect();
+      const scaleX = imgElem.naturalWidth / imgRect.width;
+      const scaleY = imgElem.naturalHeight / imgRect.height;
 
-      const cropX = (x - imgRect.left) * scaleX;
-      const cropY = (y - imgRect.top) * scaleY;
-      const cropW = w * scaleX;
-      const cropH = h * scaleY;
+      const cropX = Math.max(0, (x - imgRect.left) * scaleX);
+      const cropY = Math.max(0, (y - imgRect.top) * scaleY);
+      const cropW = Math.min(imgElem.naturalWidth - cropX, w * scaleX);
+      const cropH = Math.min(imgElem.naturalHeight - cropY, h * scaleY);
+
+      if (cropW <= 0 || cropH <= 0) {
+        alert("أبعاد التحديد غير صالحة، يرجى المحاولة ثانية.");
+        return;
+      }
 
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = cropW;
@@ -420,14 +479,15 @@
       const tCtx = tempCanvas.getContext('2d');
 
       try {
-        tCtx.drawImage(elem, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-        const base64Data = tempCanvas.toDataURL('image/jpeg', 0.9);
+        tCtx.drawImage(imgElem, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        const base64Data = tempCanvas.toDataURL('image/jpeg', 0.95);
         sendToTranslate(base64Data);
       } catch (err) {
-        logError("تعذر التقاط الصورة من الشاشة", err);
+        logError("تعذر اقتصاص الصورة بدقة", err);
         alert("فشل التقاط الصورة: " + err.message);
       }
     }
+
 
     // ----------------- طلب الترجمة الفصيحة وتفكيك الكلمات -----------------
     async function sendToTranslate(base64Image) {
