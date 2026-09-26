@@ -1376,23 +1376,45 @@
 
 
       function checkLastRead() {
-        if (!db) return;
-        const tx = db.transaction("history", "readonly");
-        const req = tx.objectStore("history").get("lastRead");
-        req.onsuccess = () => {
-          const last = req.result ? req.result.data : null;
-          if (last && last.url) {
-            continueCard.style.display = 'flex';
-            document.getElementById('continueTitle').innerText = last.title;
-            document.getElementById('continueCover').src = `${BACKEND_URL}/api/proxy?img=${encodeURIComponent(last.coverUrl)}`;
-            document.getElementById('continuePageInfo').innerHTML = `<i class="fa-regular fa-file-image"></i> صفحة ${last.lastPage || 1} من ${last.totalPages || '?'}`;
-            continueCard.dataset.url = last.url;
-            continueCard.dataset.page = last.lastPage || 1;
-          } else {
-            continueCard.style.display = 'none';
-          }
-        };
+        if (firestoreDB && currentAuthUser) {
+          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("history").doc("lastRead").get().then(doc => {
+            if (doc.exists && doc.data() && doc.data().url) {
+              displayLastReadCard(doc.data());
+            } else {
+              fallbackLocalLastRead();
+            }
+          }).catch(() => fallbackLocalLastRead());
+        } else {
+          fallbackLocalLastRead();
+        }
       }
+
+      function fallbackLocalLastRead() {
+        if (!db) return;
+        try {
+          const tx = db.transaction("history", "readonly");
+          const req = tx.objectStore("history").get("lastRead");
+          req.onsuccess = () => {
+            const last = req.result ? req.result.data : null;
+            if (last && last.url) {
+              displayLastReadCard(last);
+            } else {
+              if (continueCard) continueCard.style.display = 'none';
+            }
+          };
+        } catch(e){}
+      }
+
+      function displayLastReadCard(last) {
+        if (!continueCard) return;
+        continueCard.style.display = 'flex';
+        document.getElementById('continueTitle').innerText = last.title;
+        document.getElementById('continueCover').src = `${BACKEND_URL}/api/proxy?img=${encodeURIComponent(last.coverUrl)}`;
+        document.getElementById('continuePageInfo').innerHTML = `<i class="fa-regular fa-file-image"></i> صفحة ${last.lastPage || 1} من ${last.totalPages || '?'}`;
+        continueCard.dataset.url = last.url;
+        continueCard.dataset.page = last.lastPage || 1;
+      }
+
 
       function resumeLastReading() {
         const url = continueCard.dataset.url;
@@ -1402,14 +1424,34 @@
         }
       }
 
+      function getLibraryBooks(callback) {
+        if (firestoreDB && currentAuthUser) {
+          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("library").get().then(snap => {
+            const books = [];
+            snap.forEach(d => books.push(d.data()));
+            callback(books);
+          }).catch(() => fallbackLocalLibrary(callback));
+        } else {
+          fallbackLocalLibrary(callback);
+        }
+      }
+
+      function fallbackLocalLibrary(callback) {
+        if (!db) return callback([]);
+        try {
+          const tx = db.transaction("library", "readonly");
+          const store = tx.objectStore("library");
+          const req = store.getAll();
+          req.onsuccess = () => callback(req.result || []);
+          req.onerror = () => callback([]);
+        } catch(e) { callback([]); }
+      }
+
       function renderLibrary() {
-        if (!db) return;
-        const tx = db.transaction("library", "readonly");
-        const store = tx.objectStore("library");
-        const req = store.getAll();
-        req.onsuccess = () => {
-          const books = req.result || [];
-          document.getElementById('libraryCount').innerText = `${books.length} فصول`;
+        getLibraryBooks((books) => {
+          const countEl = document.getElementById('libraryCount');
+          if (countEl) countEl.innerText = `${books.length} فصول`;
+          if (!mangaGrid) return;
           mangaGrid.innerHTML = "";
 
           if (!books.length) {
@@ -1417,25 +1459,26 @@
             return;
           }
 
-          books.sort((a,b) => b.updatedAt - a.updatedAt);
+          books.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
           books.forEach(b => {
             const card = document.createElement('div');
             card.className = 'book-item';
             card.innerHTML = `
-            <button class="book-delete-btn" onclick="event.stopPropagation(); deleteBook('${encodeURIComponent(b.url)}')"><i class="fa-solid fa-trash-can"></i></button>
-            <div class="book-cover-wrapper">
-              <img class="book-cover" src="${BACKEND_URL}/api/proxy?img=${encodeURIComponent(b.coverUrl)}" loading="lazy" alt="Book">
-      </div>
-            <div class="book-details">
-              <div class="book-title">${b.title}</div>
-              <div class="book-progress"><i class="fa-regular fa-circle-check"></i> صفحة ${b.lastPage}/${b.totalPages}</div>
-      </div>
-          `;
+              <button class="book-delete-btn" onclick="event.stopPropagation(); deleteBook('${encodeURIComponent(b.url)}')"><i class="fa-solid fa-trash-can"></i></button>
+              <div class="book-cover-wrapper">
+                <img class="book-cover" src="${BACKEND_URL}/api/proxy?img=${encodeURIComponent(b.coverUrl)}" loading="lazy" alt="Book">
+              </div>
+              <div class="book-details">
+                <div class="book-title">${b.title}</div>
+                <div class="book-progress"><i class="fa-regular fa-circle-check"></i> صفحة ${b.lastPage}/${b.totalPages}</div>
+              </div>
+            `;
             card.onclick = () => loadMangaByUrl(b.url, b.lastPage);
             mangaGrid.appendChild(card);
           });
-        };
+        });
       }
+
 
       function deleteBook(encodedUrl) {
         const url = decodeURIComponent(encodedUrl);
