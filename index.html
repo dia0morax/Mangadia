@@ -625,11 +625,83 @@
     .error-details { color: #cbd5e1; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; background: #0b0f19; padding: 6px; border-radius: 6px; direction: ltr; text-align: left; }
 
     .loader { display: none; text-align: center; padding: 25px; font-size: 0.95rem; color: #38bdf8; }
+
+    /* شاشة القفل الإجبارية لتسجيل الدخول */
+    #authLockScreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(7, 9, 14, 0.95);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-card {
+      background: rgba(18, 24, 38, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 32px 24px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8), 0 0 30px var(--accent-glow);
+    }
+    .auth-brand-icon {
+      font-size: 3rem;
+      background: linear-gradient(135deg, #60a5fa, #f43f5e);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+      display: inline-block;
+    }
+    .auth-login-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px 20px;
+      border-radius: 14px;
+      background: #fff;
+      color: #0f172a;
+      border: none;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2);
+      transition: transform 0.2s, background 0.2s;
+      margin-top: 20px;
+    }
+    .auth-login-btn:active { transform: scale(0.96); }
   </style>
+
 </head>
 <body>
 
+  <!-- شاشة تسجيل الدخول الإجبارية -->
+  <div id="authLockScreen">
+    <div class="auth-card">
+      <i class="fa-solid fa-fire-flame-curved auth-brand-icon"></i>
+      <h2 style="margin: 0 0 8px 0; font-weight: 900; font-size: 1.5rem; letter-spacing: -0.5px;">dodde manga</h2>
+      <p style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; margin: 0 0 10px 0;">
+        يرجى تسجيل الدخول بحساب Google للوصول إلى مكتبتك السحابية ومزامنة فصولك ومفرداتك.
+      </p>
+      <button class="auth-login-btn" onclick="handleGoogleSignIn()">
+        <i class="fa-brands fa-google" style="color: #ea4335; font-size: 1.2rem;"></i>
+        <span>تسجيل الدخول بحساب Google</span>
+      </button>
+    </div>
+  </div>
+
   <!-- الشريط العلوي -->
+
   <header>
     <div class="brand" onclick="showLibraryView()">
       <i class="fa-solid fa-fire-flame-curved"></i>
@@ -893,14 +965,23 @@
     const firestoreDB = firebase.firestore();
     let currentAuthUser = null;
 
-    // مراقبة جلسة تسجيل الدخول بحساب Google
+    // مراقبة جلسة تسجيل الدخول بحساب Google والتحكم بقفل الشاشة الإجباري
     firebase.auth().onAuthStateChanged((user) => {
       currentAuthUser = user;
       updateAuthUI(user);
+      const lockScreen = document.getElementById('authLockScreen');
+
       if (user) {
+        if (lockScreen) lockScreen.style.display = 'none';
         syncUserDataFromCloud(user.uid);
+      } else {
+        if (lockScreen) lockScreen.style.display = 'flex';
+        // تفريغ الواجهة في حال عدم وجود جلسة
+        if (mangaGrid) mangaGrid.innerHTML = "";
+        if (continueCard) continueCard.style.display = 'none';
       }
     });
+
 
     function handleGoogleSignIn() {
       if (currentAuthUser) {
@@ -939,11 +1020,23 @@
       }
     }
 
-    // سحب ومزامنة بيانات المستخدم الخاصة من سحابة Firestore
+    // سحب ومزامنة بيانات المستخدم بالكامل (رفع الكلمات الحالية وتنزيل السحابية وتتبع التقدم)
     function syncUserDataFromCloud(uid) {
       if (!firestoreDB) return;
 
-      // مزامنة الكلمات المحفوظة
+      // 1. رفع أي كلمات مخزنة محلياً في الهاتف إلى سحابة حساب المستخدم فوراً
+      if (db) {
+        const localTx = db.transaction("words", "readonly");
+        const req = localTx.objectStore("words").getAll();
+        req.onsuccess = () => {
+          const localWords = req.result || [];
+          localWords.forEach(w => {
+            firestoreDB.collection("users").doc(uid).collection("words").doc(w.id).set(w).catch(()=>{});
+          });
+        };
+      }
+
+      // 2. تنزيل الكلمات المحفوظة في السحابة وحفظها في قاعدة بيانات الهاتف
       firestoreDB.collection("users").doc(uid).collection("words").get().then((snap) => {
         if (!snap.empty && db) {
           const tx = db.transaction("words", "readwrite");
@@ -952,7 +1045,7 @@
         }
       }).catch(err => logError("Sync Words Cloud", err.message));
 
-      // مزامنة فصول المكتبة
+      // 3. تنزيل فصول المكتبة من السحابة وتحديث واجهة الكتب
       firestoreDB.collection("users").doc(uid).collection("library").get().then((snap) => {
         if (!snap.empty && db) {
           const tx = db.transaction("library", "readwrite");
@@ -964,7 +1057,17 @@
           };
         }
       }).catch(err => logError("Sync Library Cloud", err.message));
+
+      // 4. استرجاع آخر موضع قراءة توقفت عنده سحابياً
+      firestoreDB.collection("users").doc(uid).collection("history").doc("lastRead").get().then((doc) => {
+        if (doc.exists && db) {
+          const histTx = db.transaction("history", "readwrite");
+          histTx.objectStore("history").put({ key: "lastRead", data: doc.data() });
+          histTx.oncomplete = () => checkLastRead();
+        }
+      }).catch(()=>{});
     }
+
 
 
 
@@ -1611,11 +1714,8 @@
       btn.classList.add('saved');
       btn.disabled = true;
 
-      // مزامنة سحابية تلقائية فورية دون تدخل
-      autoCloudSync();
-
-
       // 1. تلوين الكلمة بالأحمر داخل صندوق الترجمة
+
       const engBox = document.getElementById('englishText');
       const regex = new RegExp(`\\b(${word.trim()})\\b`, 'gi');
       engBox.innerHTML = engBox.innerHTML.replace(regex, `<span class="saved-highlight" style="color:#ef4444 !important; font-weight:800; text-decoration:underline;">$1</span>`);
@@ -1705,9 +1805,12 @@
       tx.objectStore("words").delete(id);
       tx.oncomplete = () => {
         renderVocabByDays();
-        if (firestoreDB) firestoreDB.collection("vocabulary").doc(id).delete().catch(()=>{});
+        if (firestoreDB && currentAuthUser) {
+          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("words").doc(id).delete().catch(()=>{});
+        }
       };
     }
+
 
     function deleteDayWords(dateStr) {
       if (!confirm(`هل أنت متأكد من حذف كلمات يوم ${dateStr}؟`)) return;
