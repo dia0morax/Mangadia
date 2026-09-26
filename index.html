@@ -843,6 +843,15 @@
         <span>dodde manga</span>
       </div>
       <div class="header-actions">
+        <!-- زر تفعيل الفحص التلقائي الذكي وأيقونة الشرح -->
+        <div id="ocrToggleContainer" style="display:none; align-items:center; gap:6px; background:rgba(255,255,255,0.06); padding:4px 10px; border-radius:12px; border:1px solid var(--card-border);">
+          <button id="ocrToggleBtn" class="day-btn" style="background:#475569; padding:5px 10px; font-weight:bold; font-size:0.75rem; border-radius:8px;" onclick="toggleAutoOCR()">
+            <i class="fa-solid fa-eye-slash"></i> مسح تلقائي: معطل
+          </button>
+          <button class="day-btn" style="background:transparent; padding:3px 6px; color:#38bdf8; font-size:0.85rem;" onclick="openOcrHelpModal()" title="شرح وتحذير الفحص التلقائي">
+            <i class="fa-solid fa-circle-question"></i>
+          </button>
+        </div>
         <button id="googleAuthBtn" class="google-btn" onclick="handleGoogleSignIn()">
           <i class="fa-brands fa-google" style="color:#ea4335;"></i>
           <span id="googleBtnText">دخول بحساب Google</span>
@@ -851,6 +860,7 @@
       </div>
 
     </header>
+
 
 
 
@@ -1002,26 +1012,59 @@
       </div>
     </div>
 
-    <!-- نافذة حالة مزامنة حساب Google -->
-    <div id="cloudSyncModal" class="modal-overlay">
-      <div class="modal-content">
-        <div class="sheet-header">
-          <span class="sheet-title"><i class="fa-brands fa-google" style="color:#4285f4;"></i> المزامنة السحابية التلقائية</span>
-          <button class="close-btn" onclick="closeCloudSyncModal()"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div id="syncStatusBox" style="text-align:center; padding:15px 0;">
-          <i class="fa-solid fa-cloud-arrow-up" style="font-size:2.5rem; color:#38bdf8; margin-bottom:12px; display:block;"></i>
-          <h4 id="userGreeting" style="margin:0 0 8px 0;">تسجيل الدخول بحساب Google</h4>
-          <p id="userSyncDesc" style="font-size:0.85rem; color:var(--text-muted); margin:0 0 16px 0;">
-            يتم حفظ فصولك، وتاريخ وقوفك، وكلمات الحافظة تلقائياً في السحابة الخاصة بحسابك دون الحاجة لتنزيل أي ملفات.
-          </p>
-          <div id="googleBtnContainer" style="display:flex; justify-content:center; margin-bottom:10px;"></div>
-          <button id="logoutBtn" class="day-btn" style="background:#dc2626; padding:10px 16px; display:none; margin:0 auto;" onclick="handleGoogleSignOut()">
-            <i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج
-          </button>
-        </div>
+  <!-- نافذة حالة مزامنة حساب Google -->
+  <div id="cloudSyncModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="sheet-header">
+        <span class="sheet-title"><i class="fa-brands fa-google" style="color:#4285f4;"></i> المزامنة السحابية التلقائية</span>
+        <button class="close-btn" onclick="closeCloudSyncModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="syncStatusBox" style="text-align:center; padding:15px 0;">
+        <i class="fa-solid fa-cloud-arrow-up" style="font-size:2.5rem; color:#38bdf8; margin-bottom:12px; display:block;"></i>
+        <h4 id="userGreeting" style="margin:0 0 8px 0;">تسجيل الدخول بحساب Google</h4>
+        <p id="userSyncDesc" style="font-size:0.85rem; color:var(--text-muted); margin:0 0 16px 0;">
+          يتم حفظ فصولك، وتاريخ وقوفك، وكلمات الحافظة تلقائياً في السحابة الخاصة بحسابك دون الحاجة لتنزيل أي ملفات.
+        </p>
+        <div id="googleBtnContainer" style="display:flex; justify-content:center; margin-bottom:10px;"></div>
+        <button id="logoutBtn" class="day-btn" style="background:#dc2626; padding:10px 16px; display:none; margin:0 auto;" onclick="handleGoogleSignOut()">
+          <i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج
+        </button>
       </div>
     </div>
+  </div>
+
+  <!-- نافذة شرح وظيفة المسح التلقائي والتحذير من السكرول السريع -->
+  <div id="ocrHelpModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="sheet-header">
+        <span class="sheet-title"><i class="fa-solid fa-circle-info" style="color:#38bdf8;"></i> المسح الذكي لصفحات المانغا</span>
+        <button class="close-btn" onclick="closeOcrHelpModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div style="font-size:0.88rem; line-height:1.7; color:#cbd5e1; margin-bottom:14px;">
+        <p>تقوم هذه الميزة بفحص <b>الصفحة الحالية المعروضة أمامك والصفحة التي تليها فقط</b>، لكشف وتظليل المفردات المحفوظة بحافظتك بدقة عالية وتخزين نتائجها محلياً بجهازك.</p>
+        <div style="background:rgba(239, 68, 68, 0.15); border:1.5px solid #ef4444; border-radius:12px; padding:12px; color:#fca5a5; font-weight:bold; margin-top:10px;">
+          <i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;"></i> تحذير هام جداً لمنع استهلاك الباقة المجانية:
+          <div style="font-size:0.8rem; font-weight:normal; color:#fecaca; margin-top:4px;">
+            يُمنع التمرير السريع (Fast Scrolling) أثناء تفعيل الميزة، لأن إرسال طلبات فحص كثيرة دفعة واحدة يستهلك خطتك المجانية في Gemini API فوراً. عند التمرير السريع سيقوم النظام بإيقاف وتجميد التمرير لحمايتك.
+          </div>
+        </div>
+      </div>
+      <button class="day-btn" style="background:#2563eb; padding:10px; font-weight:bold;" onclick="closeOcrHelpModal()">فهمت ذلك</button>
+    </div>
+  </div>
+
+  <!-- نافذة تنبيه تجميد التمرير السريع للحماية -->
+  <div id="scrollFreezeModal" class="modal-overlay" style="z-index:999999;">
+    <div class="modal-content" style="max-width: 400px; text-align:center; border:2px solid #ef4444;">
+      <i class="fa-solid fa-hand fa-bounce" style="font-size:3rem; color:#ef4444; margin-bottom:12px;"></i>
+      <h3 style="color:#ef4444; margin:0 0 8px 0; font-weight:800;">تم إيقاف التمرير مؤقتاً!</h3>
+      <p style="font-size:0.88rem; color:#f8fafc; line-height:1.6; margin:0 0 16px 0;">
+        تم رصد تمرير سريع جداً أثناء تفعيل المسح الذكي. لحماية باقتك المجانية من النفاد وحماية حسابك من الحظر تم تجميد التمرير لمدة 3 ثوانٍ.
+      </p>
+      <div style="font-size:0.8rem; color:#94a3b8;">يرجى التصفح بهدوء صفحة تلو الأخرى.</div>
+    </div>
+  </div>
+
 
 
 
@@ -1127,7 +1170,7 @@
 
       let db;
 
-      const request = indexedDB.open("MangaSuperDB", 3);
+      const request = indexedDB.open("MangaSuperDB", 4);
       request.onupgradeneeded = (e) => {
         db = e.target.result;
         if (!db.objectStoreNames.contains("words")) {
@@ -1143,12 +1186,16 @@
         if (!db.objectStoreNames.contains("chapter_pages")) {
           db.createObjectStore("chapter_pages", { keyPath: "key" });
         }
+        if (!db.objectStoreNames.contains("page_ocr_cache")) {
+          db.createObjectStore("page_ocr_cache", { keyPath: "key" });
+        }
       };
       request.onsuccess = (e) => {
         db = e.target.result;
         renderLibrary();
         checkLastRead();
       };
+
 
 
       request.onerror = (e) => logError("IndexedDB Init Error", e.target.error);
@@ -1612,30 +1659,33 @@
       // ----------------- التنقل ونظام ملء الشاشة الكامل -----------------
       const fullscreenFab = document.getElementById('fullscreenFab');
 
-    function showLibraryView() {
-      if (readerView.style.display === 'block') {
-        if (!confirm("هل أنت متأكد من العودة إلى المكتبة وإغلاق الفصل؟")) {
-          return;
+      function showLibraryView() {
+        if (readerView.style.display === 'block') {
+          if (!confirm("هل أنت متأكد من العودة إلى المكتبة وإغلاق الفصل؟")) {
+            return;
+          }
         }
+        document.body.classList.remove('is-fullscreen');
+        libraryView.style.display = 'block';
+        readerView.style.display = 'none';
+        homeFab.style.display = 'none';
+        if (fullscreenFab) fullscreenFab.style.display = 'none';
+        const ocrCont = document.getElementById('ocrToggleContainer');
+        if (ocrCont) ocrCont.style.display = 'none';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        renderLibrary();
+        checkLastRead();
       }
-      document.body.classList.remove('is-fullscreen');
-      libraryView.style.display = 'block';
-      readerView.style.display = 'none';
-      homeFab.style.display = 'none';
-      if (fullscreenFab) fullscreenFab.style.display = 'none';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      renderLibrary();
-      checkLastRead();
-    }
-
-
 
       function showReaderView() {
         libraryView.style.display = 'none';
         readerView.style.display = 'block';
         homeFab.style.display = 'flex';
         if (fullscreenFab) fullscreenFab.style.display = 'flex';
+        const ocrCont = document.getElementById('ocrToggleContainer');
+        if (ocrCont) ocrCont.style.display = 'flex';
       }
+
 
       // تفعيل ملء الشاشة البصري الانغماسي الذي يحافظ على الزوم الطبيعي بنسبة 100%
       function toggleAppFullscreen() {
@@ -1843,6 +1893,167 @@
       }
 
 
+      // حالة الفحص التلقائي: معطل افتراضياً 100% لحماية باقتك
+      let isAutoOCREnabled = false;
+      let lastScannedPageTimes = [];
+      let isScrollFrozen = false;
+
+      function toggleAutoOCR() {
+        isAutoOCREnabled = !isAutoOCREnabled;
+        const btn = document.getElementById('ocrToggleBtn');
+        if (btn) {
+          if (isAutoOCREnabled) {
+            btn.style.background = '#10b981';
+            btn.innerHTML = `<i class="fa-solid fa-eye"></i> مسح تلقائي: مفعل`;
+            // فحص الصفحة المعروضة حالياً فور تشغيل الميزة
+            const visibleWrapper = document.querySelector('.page-wrapper');
+            if (visibleWrapper) {
+              const pNum = parseInt(visibleWrapper.dataset.page || "1", 10);
+              handleSelectivePageScan(pNum);
+            }
+          } else {
+            btn.style.background = '#475569';
+            btn.innerHTML = `<i class="fa-solid fa-eye-slash"></i> مسح تلقائي: معطل`;
+          }
+        }
+      }
+
+      function openOcrHelpModal() {
+        document.getElementById('ocrHelpModal').style.display = 'flex';
+      }
+      function closeOcrHelpModal() {
+        document.getElementById('ocrHelpModal').style.display = 'none';
+      }
+
+      // نظام الحماية من التمرير السريع وتجميد الشاشة
+      function checkScrollThrottle() {
+        if (!isAutoOCREnabled) return false;
+        const now = Date.now();
+        lastScannedPageTimes = lastScannedPageTimes.filter(t => now - t < 4000);
+        lastScannedPageTimes.push(now);
+
+        // إذا تم طلب فحص أكثر من 3 صفحات خلال 4 ثوانٍ يتم تجميد التمرير فوراً
+        if (lastScannedPageTimes.length >= 4) {
+          freezeScrollForProtection();
+          return true;
+        }
+        return false;
+      }
+
+      function freezeScrollForProtection() {
+        if (isScrollFrozen) return;
+        isScrollFrozen = true;
+        document.body.style.overflow = 'hidden';
+        const freezeModal = document.getElementById('scrollFreezeModal');
+        if (freezeModal) freezeModal.style.display = 'flex';
+
+        setTimeout(() => {
+          document.body.style.overflow = '';
+          if (freezeModal) freezeModal.style.display = 'none';
+          lastScannedPageTimes = [];
+          isScrollFrozen = false;
+        }, 3000);
+      }
+
+      async function getCachedPageOCR(key) {
+        if (!db) return null;
+        return new Promise((resolve) => {
+          try {
+            const tx = db.transaction("page_ocr_cache", "readonly");
+            const store = tx.objectStore("page_ocr_cache");
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result ? req.result.words : null);
+            req.onerror = () => resolve(null);
+          } catch(e) { resolve(null); }
+        });
+      }
+
+      function setCachedPageOCR(key, words) {
+        if (!db) return;
+        try {
+          const tx = db.transaction("page_ocr_cache", "readwrite");
+          const store = tx.objectStore("page_ocr_cache");
+          store.put({ key, words, timestamp: Date.now() });
+        } catch(e) {}
+      }
+
+      // فحص صفحة معينة وتطبيق الهايلايت (يدعم التفعيل القسري عند إضافة كلمة جديدة)
+      async function triggerLazyPageOCR(wrapper, pageNum, forceScan = false) {
+        if (!currentChapterUrl || !wrapper) return;
+        const cacheKey = `${currentChapterUrl}_p${pageNum}`;
+
+        let ocrWords = await getCachedPageOCR(cacheKey);
+
+        if (!ocrWords) {
+          // إذا لم يكن استدعاءً إجبارياً وكان المسح التلقائي معطلاً، نخرج لتوفير الباقة
+          if (!forceScan && !isAutoOCREnabled) return;
+          if (!forceScan && checkScrollThrottle()) return;
+
+          const imgElem = wrapper.querySelector('.manga-page');
+          const rawSrc = imgElem ? imgElem.src : "";
+          if (!rawSrc) return;
+
+
+          try {
+            const res = await fetch(`${BACKEND_URL}/api/page-ocr`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_url: rawSrc })
+            });
+            const data = await res.json();
+            if (data && data.words) {
+              ocrWords = data.words;
+              setCachedPageOCR(cacheKey, ocrWords);
+            }
+          } catch(err) {
+            logError("Page OCR Error", err.message);
+          }
+        }
+
+        if (ocrWords && ocrWords.length) {
+          matchAndHighlightPage(wrapper, ocrWords);
+        }
+      }
+
+      // فحص حصري للصفحة الحالية والصفحة التي تليها فقط
+      function handleSelectivePageScan(currentPageNum) {
+        const currentWrapper = document.querySelector(`.page-wrapper[data-page='${currentPageNum}']`);
+        if (currentWrapper) triggerLazyPageOCR(currentWrapper, currentPageNum);
+
+        const nextWrapper = document.querySelector(`.page-wrapper[data-page='${currentPageNum + 1}']`);
+        if (nextWrapper) triggerLazyPageOCR(nextWrapper, currentPageNum + 1);
+      }
+
+      function matchAndHighlightPage(wrapper, ocrWords) {
+        getAllWords((savedWordsList) => {
+          if (!savedWordsList || !savedWordsList.length) return;
+          const savedMap = new Map();
+          savedWordsList.forEach(w => {
+            if (w && w.word) {
+              savedMap.set(w.word.toLowerCase().trim(), w);
+            }
+          });
+
+          ocrWords.forEach(item => {
+            const cleanText = (item.text || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (savedMap.has(cleanText)) {
+              const savedItem = savedMap.get(cleanText);
+              const b = item.box || {};
+              const boxData = {
+                left: b.left || 0,
+                top: b.top || 0,
+                width: b.width || 0,
+                height: b.height || 0,
+                word: savedItem.word,
+                meaning: savedItem.meaning || "محفوظة بالحافظة",
+                sentence: savedItem.sentence || ""
+              };
+              drawWordHighlightOnPage(wrapper, boxData);
+            }
+          });
+        });
+      }
+
       let trackerObserver = null;
       function setupPageTracker() {
         if (trackerObserver) trackerObserver.disconnect();
@@ -1852,13 +2063,19 @@
               const pageNum = parseInt(entry.target.dataset.page, 10);
               if (pageNum && currentChapterUrl) {
                 updateLastReading(currentChapterUrl, pageNum);
+                // الفحص فقط للصفحة الحالية وتجهيز التالية إذا كانت الخاصية مفعلة
+                if (isAutoOCREnabled) {
+                  handleSelectivePageScan(pageNum);
+                }
               }
             }
           });
-        }, { threshold: 0.5 });
+        }, { threshold: 0.4 });
 
         document.querySelectorAll('.page-wrapper').forEach(p => trackerObserver.observe(p));
       }
+
+
 
 
 
@@ -2371,89 +2588,72 @@
 
 
       function handleWordAdd(btn, word, meaning) {
+        const cleanWord = word.trim();
         const todayStr = new Date().toISOString().slice(0, 10);
         const record = {
-          id: `${word.toLowerCase().trim()}_${todayStr}`,
-          word: word.trim(),
+          id: `${cleanWord.toLowerCase()}_${todayStr}`,
+          word: cleanWord,
           meaning: meaning.trim(),
-          sentence: currentSentence,
+          sentence: currentSentence || "",
           dateStr: todayStr,
           timestamp: Date.now()
         };
 
+        // 1. الحفظ الفوري في قاعدة البيانات المحلية مع تحديث الحافظة فوراً
         if (db) {
           const tx = db.transaction("words", "readwrite");
           tx.objectStore("words").put(record);
+          tx.oncomplete = () => {
+            renderVocabByDays();
+          };
         }
 
-        // حفظ الكلمة سحابياً في مجلد المستخدم الخاص
+        // 2. المزامنة المباشرة مع سحابة Google Firestore
         if (firestoreDB && currentAuthUser) {
-          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("words").doc(record.id).set(record).catch(e => logError("Cloud Vocab", e));
+          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("words").doc(record.id).set(record, { merge: true })
+            .then(() => renderVocabByDays())
+            .catch(e => logError("Cloud Vocab", e));
         }
 
-
+        // 3. تغيير حالة الزر وتلوين الكلمة في نافذة الترجمة
         btn.innerHTML = `<i class="fa-solid fa-check"></i>`;
         btn.classList.add('saved');
         btn.disabled = true;
 
-        // 1. تلوين الكلمة بالأحمر داخل صندوق الترجمة
-
         const engBox = document.getElementById('englishText');
-        const regex = new RegExp(`\\b(${word.trim()})\\b`, 'gi');
-        engBox.innerHTML = engBox.innerHTML.replace(regex, `<span class="saved-highlight" style="color:#ef4444 !important; font-weight:800; text-decoration:underline;">$1</span>`);
+        if (engBox) {
+          try {
+            const escapedWord = cleanWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`\\b(${escapedWord})\\b`, 'gi');
+            engBox.innerHTML = engBox.innerHTML.replace(regex, `<span class="saved-highlight" style="color:#ef4444 !important; font-weight:800; text-decoration:underline;">$1</span>`);
+          } catch(e) {}
+        }
 
-        // 2. وضع هايلايت مخصص للكلمة فقط داخل صفحة المانجا بنسب دقيقة وليس المربع المقصوص كاملاً
-        if (lastSelectedWrapper && lastRelativeBox) {
+        // 4. تسليط الهايلايت الدقيق على الكلمة فوراً في الصفحة الحالية
+        if (lastSelectedWrapper) {
           const pageNum = parseInt(lastSelectedWrapper.dataset.page || "1", 10);
-
-          // حساب موضع السطر بدقة استناداً إلى مكان ظهور الكلمة داخل النص
-          const fullText = (currentSentence || "").trim();
-          const cleanWord = word.trim();
-          const wordIndex = fullText.toLowerCase().indexOf(cleanWord.toLowerCase());
-          const textLen = Math.max(fullText.length, 1);
-
-          let verticalRatio = 0.4;
-          if (wordIndex !== -1) {
-            verticalRatio = Math.max(0.08, Math.min(0.82, (wordIndex / textLen)));
-          }
-
-          const calculatedTop = lastRelativeBox.top + (lastRelativeBox.height * verticalRatio);
-
-          const wordBox = {
-            left: lastRelativeBox.left + (lastRelativeBox.width * 0.12),
-            top: calculatedTop,
-            width: Math.min(Math.max(lastRelativeBox.width * 0.76, 25), 65),
-            height: 14,
-            word: cleanWord,
-            meaning: meaning.trim(),
-            sentence: currentSentence || "",
-            chapterUrl: currentChapterUrl,
-            page: pageNum
-          };
-
-
-
-
-
-          drawWordHighlightOnPage(lastSelectedWrapper, wordBox);
-          saveMangaHighlight(wordBox);
+          triggerLazyPageOCR(lastSelectedWrapper, pageNum, true);
         }
       }
 
-      // دالة رسم الهايلايتر الدقيق للكلمة فقط وربطه بالبطاقة المنبثقة
+
       function drawWordHighlightOnPage(wrapper, box) {
         const layer = wrapper.querySelector('.manga-highlight-layer');
         if (!layer) return;
 
+        // تفادي تكرار نفس الهايلايت
+        const existing = layer.querySelector(`[data-word="${box.word.toLowerCase()}"]`);
+        if (existing) return;
+
         const hl = document.createElement('div');
         hl.className = 'manga-word-highlight';
+        hl.dataset.word = box.word.toLowerCase();
         hl.style.left = `${box.left}%`;
         hl.style.top = `${box.top}%`;
         hl.style.width = `${box.width}%`;
         hl.style.height = `${box.height}%`;
         hl.title = box.word;
 
-        // منع تسريب اللمس للطبقة السفلية لضمان عدم إطلاق الترجمة الذكية
         hl.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
         hl.addEventListener('touchend', (e) => {
           e.stopPropagation();
@@ -2469,58 +2669,13 @@
         layer.appendChild(hl);
       }
 
-
-
-      // حفظ موقع ومفردة الهايلايت محلياً وسحابياً للمزامنة عبر كل الفصول
-      function saveMangaHighlight(box) {
-        if (!db) return;
-        const hlRecord = {
-          id: `hl_${btoa(unescape(encodeURIComponent(box.chapterUrl))).replace(/\//g,'_')}_p${box.page}_${box.word.toLowerCase()}`,
-          ...box
-        };
-
-        try {
-          if (!db.objectStoreNames.contains("highlights")) {
-            // حفظ في الـ LocalStorage في حال عدم تحديث إصدار الداتابيس
-            const stored = JSON.parse(localStorage.getItem("DODDE_HIGHLIGHTS") || "[]");
-            stored.push(hlRecord);
-            localStorage.setItem("DODDE_HIGHLIGHTS", JSON.stringify(stored));
-          }
-        } catch(e) {}
-
-        if (firestoreDB && currentAuthUser) {
-          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("highlights").doc(hlRecord.id).set(hlRecord).catch(()=>{});
-        }
-      }
-
-      // تطبيق الهايلايتات للفصل مع تنظيف الشاشة وضمان الارتفاع المناسب
       function applySavedMangaHighlights(chapterUrl) {
-        // تفريغ أي هايلايتر معروض حالياً لتجنب التكرار
-        document.querySelectorAll('.manga-word-highlight').forEach(el => el.remove());
-
-        try {
-          const stored = JSON.parse(localStorage.getItem("DODDE_HIGHLIGHTS") || "[]");
-          stored.filter(h => h.chapterUrl === chapterUrl).forEach(box => {
-            box.height = 14;
-            const wrap = document.querySelector(`.page-wrapper[data-page='${box.page}']`);
-            if (wrap) drawWordHighlightOnPage(wrap, box);
-          });
-        } catch(e) {}
-
-        // التحقق من السحابة ورسم أي هايلايت محفوظ بحساب Google
-        if (firestoreDB && currentAuthUser) {
-          firestoreDB.collection("users").doc(currentAuthUser.uid).collection("highlights").where("chapterUrl", "==", chapterUrl).get().then(snap => {
-            if (!snap.empty) {
-              snap.forEach(doc => {
-                const box = doc.data();
-                box.height = 14;
-                const wrap = document.querySelector(`.page-wrapper[data-page='${box.page}']`);
-                if (wrap) drawWordHighlightOnPage(wrap, box);
-              });
-            }
-          }).catch(()=>{});
-        }
+        document.querySelectorAll('.page-wrapper').forEach(wrapper => {
+          const pageNum = parseInt(wrapper.dataset.page || "1", 10);
+          triggerLazyPageOCR(wrapper, pageNum, false);
+        });
       }
+
 
 
 
