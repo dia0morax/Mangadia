@@ -2706,28 +2706,13 @@
           } catch(e) {}
         }
 
-        // 4. رسم وتثبيت الهايلايتر فوراً وبشكل حقيقي فوق موضع الكلمة
+        // 4. تشغيل فحص الصفحة فوراً واستخراج الموضع الحقيقي للكلمة وتثبيت الهايلايتر فوقها
         if (lastSelectedWrapper) {
           const pageNum = parseInt(lastSelectedWrapper.dataset.page || "1", 10);
-          
-          // رسم هايلايتر فوري أنيق فوق منطقة التحديد ليعرف المستخدم موضع الكلمة فور حفظها
-          if (lastRelativeBox) {
-            const immediateBox = {
-              left: lastRelativeBox.left + (lastRelativeBox.width * 0.15),
-              top: lastRelativeBox.top + (lastRelativeBox.height * 0.35),
-              width: Math.max(lastRelativeBox.width * 0.7, 4),
-              height: Math.max(lastRelativeBox.height * 0.3, 1.6),
-              word: cleanWord,
-              meaning: meaning.trim(),
-              sentence: currentSentence || ""
-            };
-            drawWordHighlightOnPage(lastSelectedWrapper, immediateBox);
-          }
-
-          // تشغيل فحص الصفحة لتدقيق موضع الكلمة مع إحداثيات الـ OCR
           triggerLazyPageOCR(lastSelectedWrapper, pageNum, true);
         }
       }
+
 
 
 
@@ -2737,21 +2722,24 @@
         if (!layer) return;
 
         const wordKey = box.word.toLowerCase().trim();
-        // التحقق من عدم رسم نفس الصندوق في نفس الموضع تقريباً لتجنب التكرار
-        const existing = layer.querySelector(`[data-word="${wordKey}"][data-top="${Math.round(box.top)}"]`);
+        const boxId = `${wordKey}_${box.left.toFixed(1)}_${box.top.toFixed(1)}`;
+
+        const existing = layer.querySelector(`[data-box-id="${boxId}"]`);
         if (existing) return;
 
         const hl = document.createElement('div');
         hl.className = 'manga-word-highlight';
+        hl.dataset.boxId = boxId;
         hl.dataset.word = wordKey;
-        hl.dataset.top = Math.round(box.top);
+        
+        // إحداثيات دقيقة ومقيدة بمساحة الكلمة بالضبط بدون تمدد أو تشويه
         hl.style.left = `${box.left}%`;
         hl.style.top = `${box.top}%`;
         hl.style.width = `${box.width}%`;
         hl.style.height = `${box.height}%`;
         hl.style.display = 'block';
         hl.style.position = 'absolute';
-        hl.style.zIndex = '30';
+        hl.style.pointerEvents = 'auto';
         hl.title = box.word;
 
         hl.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
