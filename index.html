@@ -1264,17 +1264,23 @@
         }
       });
 
-      // التقاط نتيجة التحويل في حال استخدم المتصفح Redirect
-      firebase.auth().getRedirectResult().then((result) => {
-        if (result && result.user) {
-          currentAuthUser = result.user;
-          updateAuthUI(result.user);
-          const lockScreen = document.getElementById('authLockScreen');
-          if (lockScreen) lockScreen.style.setProperty('display', 'none', 'important');
-        }
-      }).catch((err) => {
-        logError("Google Redirect Result", err.message);
-      });
+      // التقاط نتيجة التحويل وتجاهل أخطاء البروتوكول إذا تم الدخول مسبقاً
+      if (location.protocol === 'http:' || location.protocol === 'https:') {
+        firebase.auth().getRedirectResult().then((result) => {
+          if (result && result.user) {
+            currentAuthUser = result.user;
+            updateAuthUI(result.user);
+            const lockScreen = document.getElementById('authLockScreen');
+            if (lockScreen) lockScreen.style.setProperty('display', 'none', 'important');
+          }
+        }).catch((err) => {
+          // تجاهل الخطأ في حال كان الدخول تم بنجاح مسبقاً عبر Popup
+          if (!currentAuthUser && !err.message.includes("auth/operation-not-supported-in-this-environment")) {
+            logError("Google Redirect Result", err.message);
+          }
+        });
+      }
+
 
       function handleGoogleSignIn() {
         if (currentAuthUser) {
@@ -2634,33 +2640,12 @@
                 });
               }
 
-              if (hasAnySavedWord && lastSelectedWrapper && lastRelativeBox) {
-                const fullText = (currentSentence || "").trim();
-                const textLen = Math.max(fullText.length, 1);
-
-                matchedSavedWords.forEach(savedWord => {
-                  const cleanWord = (savedWord || "").trim();
-                  const wordIndex = fullText.toLowerCase().indexOf(cleanWord.toLowerCase());
-                  let verticalRatio = 0.4;
-                  if (wordIndex !== -1) {
-                    verticalRatio = Math.max(0.08, Math.min(0.82, (wordIndex / textLen)));
-                  }
-
-                  const calculatedTop = lastRelativeBox.top + (lastRelativeBox.height * verticalRatio);
-
-                  const wordBox = {
-                    left: lastRelativeBox.left + (lastRelativeBox.width * 0.12),
-                    top: calculatedTop,
-                    width: Math.min(Math.max(lastRelativeBox.width * 0.76, 25), 65),
-                    height: 14,
-                    word: cleanWord,
-                    meaning: "محفوظة مسبقاً",
-                    chapterUrl: currentChapterUrl,
-                    page: parseInt(lastSelectedWrapper.dataset.page || "1", 10)
-                  };
-                  drawWordHighlightOnPage(lastSelectedWrapper, wordBox);
-                });
+              // لا نقوم برسم مربعات تقريبية عشوائية فوق الاقتصاص، بل نترك الرسم حصراً للـ Bounding Box الدقيق
+              if (hasAnySavedWord && lastSelectedWrapper) {
+                const pageNum = parseInt(lastSelectedWrapper.dataset.page || "1", 10);
+                triggerLazyPageOCR(lastSelectedWrapper, pageNum, false);
               }
+
             } catch (innerErr) {
               logError("Highlight Process Error", innerErr.message);
             } finally {
@@ -2721,12 +2706,29 @@
           } catch(e) {}
         }
 
-        // 4. إجبار فحص الصفحة الحالية فوراً وتثبيت الهايلايتر فوق الكلمة بدقة
+        // 4. رسم وتثبيت الهايلايتر فوراً وبشكل حقيقي فوق موضع الكلمة
         if (lastSelectedWrapper) {
           const pageNum = parseInt(lastSelectedWrapper.dataset.page || "1", 10);
+          
+          // رسم هايلايتر فوري أنيق فوق منطقة التحديد ليعرف المستخدم موضع الكلمة فور حفظها
+          if (lastRelativeBox) {
+            const immediateBox = {
+              left: lastRelativeBox.left + (lastRelativeBox.width * 0.15),
+              top: lastRelativeBox.top + (lastRelativeBox.height * 0.35),
+              width: Math.max(lastRelativeBox.width * 0.7, 4),
+              height: Math.max(lastRelativeBox.height * 0.3, 1.6),
+              word: cleanWord,
+              meaning: meaning.trim(),
+              sentence: currentSentence || ""
+            };
+            drawWordHighlightOnPage(lastSelectedWrapper, immediateBox);
+          }
+
+          // تشغيل فحص الصفحة لتدقيق موضع الكلمة مع إحداثيات الـ OCR
           triggerLazyPageOCR(lastSelectedWrapper, pageNum, true);
         }
       }
+
 
 
 
