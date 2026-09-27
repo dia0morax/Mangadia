@@ -400,18 +400,20 @@
       /* هايلايت ماركر ذكي ودقيق يطابق موضع وأبعاد الكلمة الحقيقية */
       .manga-word-highlight {
         position: absolute !important;
-        background: rgba(239, 68, 68, 0.32) !important;
-        border-bottom: 2px solid #ef4444 !important;
-        border-radius: 3px !important;
+        background: rgba(239, 68, 68, 0.35) !important;
+        border-bottom: 2px solid rgba(239, 68, 68, 0.8) !important;
+        border-radius: 2px !important;
         animation: highlightFade 0.2s ease-out;
         pointer-events: auto;
         cursor: pointer;
         transition: background 0.2s;
         z-index: 35 !important;
+        mix-blend-mode: multiply !important;
       }
       .manga-word-highlight:active {
-        background: rgba(239, 68, 68, 0.55) !important;
+        background: rgba(239, 68, 68, 0.6) !important;
       }
+
 
       /* شارة تقدم فحص الصفحة الحالية والتالية التفاعلية */
       .page-ocr-status {
@@ -2015,19 +2017,27 @@
         badge.innerText = percentText;
       }
 
-      // فحص صفحة معينة وتحديث النسبة المئوية وتسجيل أي خطأ يصدر من Gemini
+      // فحص صفحة معينة مع استخدام مفتاح نسخة جديد لتجاوز الكاش ذي الإحداثيات المقلوبة القديم
       async function triggerLazyPageOCR(wrapper, pageNum, forceScan = false) {
         if (!currentChapterUrl || !wrapper) return;
-        const cacheKey = `${currentChapterUrl}_p${pageNum}`;
+        // المفتاح v2 يضمن تجاهل النتائج القديمة التي كانت إحداثياتها مزاحة
+        const cacheKey = `${currentChapterUrl}_p${pageNum}_v2`;
 
+        // 1. الفحص الفوري في الذاكرة المحلية (IndexedDB)
         let ocrWords = await getCachedPageOCR(cacheKey);
 
-        if (ocrWords) {
+        if (ocrWords && ocrWords.length) {
+          wrapper.dataset.ocrLoaded = "true";
           updatePageOcrBadge(pageNum, 'done', 'فحص 100%');
           matchAndHighlightPage(wrapper, ocrWords);
           return;
         }
 
+
+        // إذا كانت الصفحة موسومة بأنها مفحوصة بالفعل في الجلسة نكتفي بذلك
+        if (wrapper.dataset.ocrLoaded === "true" && !forceScan) return;
+
+        // 2. إذا لم تكن موجودة وكان المسح التلقائي معطلاً ولم يكن طلباً يدوياً، نخرج بهدوء
         if (!forceScan && !isAutoOCREnabled) return;
         if (!forceScan && checkScrollThrottle()) return;
 
@@ -2055,12 +2065,14 @@
             return;
           }
 
-          if (data && data.words) {
+          if (data && data.words && data.words.length) {
             ocrWords = data.words;
             setCachedPageOCR(cacheKey, ocrWords);
+            wrapper.dataset.ocrLoaded = "true";
             updatePageOcrBadge(pageNum, 'done', 'فحص 100%');
             matchAndHighlightPage(wrapper, ocrWords);
           } else {
+            wrapper.dataset.ocrLoaded = "true";
             updatePageOcrBadge(pageNum, 'done', 'فحص 100%');
           }
         } catch(err) {
@@ -2069,7 +2081,7 @@
         }
       }
 
-      // فحص حصري للصفحة الحالية والصفحة التي تليها فقط
+      // فحص حصري للصفحة الحالية وتجهيز التالية
       function handleSelectivePageScan(currentPageNum) {
         const currentWrapper = document.querySelector(`.page-wrapper[data-page='${currentPageNum}']`);
         if (currentWrapper) triggerLazyPageOCR(currentWrapper, currentPageNum);
@@ -2084,13 +2096,13 @@
         getAllWords((savedWordsList) => {
           if (!savedWordsList || !savedWordsList.length) return;
 
-          // استخراج الكلمات المحفوظة وتجهيز صيغها النقية
+          // تجهيز قاموس الكلمات المحفوظة مع تنظيف علامات الترقيم
           const savedDict = new Map();
           savedWordsList.forEach(w => {
             if (w && w.word) {
-              const pure = w.word.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-              if (pure.length >= 2) {
-                savedDict.set(pure, w);
+              const cleanKey = w.word.toLowerCase().trim().replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '');
+              if (cleanKey.length >= 1) {
+                savedDict.set(cleanKey, w);
               }
             }
           });
@@ -2098,18 +2110,31 @@
           if (!savedDict.size) return;
 
           ocrWords.forEach(item => {
-            const wordRaw = (item.text || "").toLowerCase().trim();
-            const wordClean = wordRaw.replace(/[^a-z0-9]/g, '');
-            const b = item.box || {};
+            const rawWord = (item.text || "").toLowerCase().trim();
+            // استبعاد النصوص التي تحتوي على مسافات
+            if (!rawWord || rawWord.includes(' ')) return;
 
-            // مطابقة الكلمة مباشرة أو التحقق من وجودها
-            if (savedDict.has(wordClean)) {
-              const saved = savedDict.get(wordClean);
+            // تنظيف الكلمة المستخرجة من الفواصل والنقاط المحيطة
+            const cleanWord = rawWord.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '');
+            if (!cleanWord) return;
+
+            const b = item.box || {};
+            const leftVal = parseFloat(b.left);
+            const topVal = parseFloat(b.top);
+            const wVal = parseFloat(b.width);
+            const hVal = parseFloat(b.height);
+
+            if (isNaN(leftVal) || isNaN(topVal) || isNaN(wVal) || isNaN(hVal)) return;
+
+            // شرط صارم: مطابقة الكلمة بالكامل (Exact Word Match)
+            // يمنع نهائياً تظليل "the" إذا كانت الكلمة "other" أو "their" أو "there"
+            if (savedDict.has(cleanWord)) {
+              const saved = savedDict.get(cleanWord);
               const boxData = {
-                left: Math.max(0, parseFloat(b.left) || 0),
-                top: Math.max(0, parseFloat(b.top) || 0),
-                width: Math.min(100, Math.max(parseFloat(b.width) || 2, 1.5)),
-                height: Math.min(100, Math.max(parseFloat(b.height) || 1.2, 0.8)),
+                left: Math.max(0, leftVal),
+                top: Math.max(0, topVal),
+                width: wVal,
+                height: hVal,
                 word: saved.word,
                 meaning: saved.meaning || "محفوظة بالحافظة",
                 sentence: saved.sentence || ""
@@ -2119,6 +2144,8 @@
           });
         });
       }
+
+
 
 
 
@@ -2731,8 +2758,8 @@
         hl.className = 'manga-word-highlight';
         hl.dataset.boxId = boxId;
         hl.dataset.word = wordKey;
-        
-        // إحداثيات دقيقة ومقيدة بمساحة الكلمة بالضبط بدون تمدد أو تشويه
+
+        // تطبيق الإحداثيات المئوية الحقيقية بدقة تامة فوق حروف الكلمة
         hl.style.left = `${box.left}%`;
         hl.style.top = `${box.top}%`;
         hl.style.width = `${box.width}%`;
@@ -2741,6 +2768,7 @@
         hl.style.position = 'absolute';
         hl.style.pointerEvents = 'auto';
         hl.title = box.word;
+
 
         hl.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
         hl.addEventListener('touchend', (e) => {
@@ -2756,6 +2784,8 @@
 
         layer.appendChild(hl);
       }
+
+
 
 
       function applySavedMangaHighlights(chapterUrl) {
